@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trading Ledger Pro (v2.9 - Date Fix)</title>
+    <title>TradeBook Pro (SaaS Edition)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -18,6 +18,11 @@
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
 
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
     <style>
         body { font-family: 'Inter', system-ui, sans-serif; background-color: #f8fafc; }
         input:focus, select:focus, textarea:focus { outline: 2px solid #2563eb; background-color: #eff6ff; }
@@ -29,6 +34,12 @@
         .fade-in { animation: fadeIn 0.3s ease-in; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .clickable-row:hover { background-color: #eff6ff; cursor: pointer; }
+        
+        /* Login & SaaS Screens */
+        .login-bg { background: linear-gradient(135deg, #0f172a 0%, #334155 100%); }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .pricing-card:hover { transform: translateY(-5px); transition: all 0.3s ease; }
     </style>
 </head>
 <body>
@@ -36,6 +47,35 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+        // --- FIREBASE CONFIGURATION ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyC8FipmgGtFjPuX9rC9LB4n3BMR2ZTahGA",
+            authDomain: "tradebook-f4edd.firebaseapp.com",
+            projectId: "tradebook-f4edd",
+            storageBucket: "tradebook-f4edd.firebasestorage.app",
+            messagingSenderId: "1079775732091",
+            appId: "1:1079775732091:web:704adcda7844aec8b41dde",
+            measurementId: "G-HJWJPCES7G"
+        };
+
+        // Initialize Firebase safely
+        let auth = null;
+        let db = null;
+        let isFirebaseReady = false;
+        try {
+            if (firebaseConfig.apiKey) {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
+                }
+                auth = firebase.auth();
+                db = firebase.firestore();
+                db.enablePersistence().catch(err => console.log("Persistence error (Dev Mode):", err.code));
+                isFirebaseReady = true;
+            }
+        } catch (e) {
+            console.error("Firebase Init Error:", e);
+        }
 
         // --- ICONS ---
         const Icon = ({ name, size = 16, className = "" }) => {
@@ -139,7 +179,9 @@
                 secondary: "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:bg-slate-100",
                 danger: "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100",
                 success: "bg-emerald-600 text-white hover:bg-emerald-700",
-                warning: "bg-amber-100 text-amber-700 border border-amber-200 hover:bg-amber-200"
+                warning: "bg-amber-100 text-amber-700 border border-amber-200 hover:bg-amber-200",
+                google: "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 flex items-center justify-center gap-2",
+                gold: "bg-yellow-500 text-white hover:bg-yellow-600 shadow-lg"
             };
             return <button type={type} onClick={onClick} disabled={disabled} className={`${base} ${styles[variant]} ${className}`} title={title}>{children}</button>;
         };
@@ -249,7 +291,100 @@
             </button>
         );
 
-        // --- FORMS ---
+        // --- AUTH VIEWS ---
+        
+        const LoginView = ({ onDevLogin }) => {
+            const handleGoogleLogin = async () => {
+                if (!isFirebaseReady) {
+                    alert("Firebase not configured properly. Opening in Dev Mode.");
+                    onDevLogin({ uid: 'dev-user', email: 'dev@local', displayName: 'Dev User' });
+                    return;
+                }
+                try {
+                    const provider = new firebase.auth.GoogleAuthProvider();
+                    await auth.signInWithPopup(provider);
+                } catch (error) {
+                    console.error("Login Failed", error);
+                    if (error.code === 'auth/operation-not-supported-in-this-environment') {
+                        alert("⚠️ Protocol Error: Google Login requires https://\n\nOpening Dev Mode (Local Data).");
+                        onDevLogin({ uid: 'dev-user', email: 'dev@local', displayName: 'Dev User' });
+                    } else {
+                        alert("Login Failed: " + error.message);
+                    }
+                }
+            };
+
+            return (
+                <div className="min-h-screen login-bg flex items-center justify-center p-4">
+                    <Card className="w-full max-w-md p-8 bg-white/95 backdrop-blur shadow-2xl border-0">
+                        <div className="text-center mb-8">
+                            <div className="inline-flex p-3 rounded-full bg-blue-100 text-blue-600 mb-4">
+                                <Icon name="bar-chart-3" size={32} />
+                            </div>
+                            <h1 className="text-3xl font-bold text-slate-800">TradeBook Pro</h1>
+                            <p className="text-slate-500 mt-2">Professional Trading Journal</p>
+                        </div>
+                        <div className="space-y-4">
+                            <Button onClick={handleGoogleLogin} variant="google" className="w-full py-3 text-base shadow-sm font-bold">
+                                <Icon name="globe" size={18} /> Sign in with Google
+                            </Button>
+                        </div>
+                        <div className="mt-8 text-center text-xs text-slate-400">
+                            <p>v3.3 SaaS Edition</p>
+                        </div>
+                    </Card>
+                </div>
+            );
+        };
+
+        const SubscriptionView = ({ onSubscribe, user }) => {
+            return (
+                <div className="min-h-screen login-bg flex items-center justify-center p-4">
+                    <Card className="w-full max-w-2xl p-0 bg-white/95 backdrop-blur shadow-2xl border-0 overflow-hidden flex flex-col md:flex-row">
+                        <div className="md:w-1/2 p-8 bg-slate-50 border-r border-slate-100">
+                            <h2 className="text-2xl font-bold text-slate-800 mb-2">Welcome, {user.displayName?.split(' ')[0]}!</h2>
+                            <p className="text-slate-500 text-sm mb-6">Choose a plan to continue your trading journey.</p>
+                            
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-green-100 p-2 rounded-full text-green-600"><Icon name="check" size={16}/></div>
+                                    <span className="text-sm font-medium text-slate-700">Unlimited Trade Entries</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-green-100 p-2 rounded-full text-green-600"><Icon name="check" size={16}/></div>
+                                    <span className="text-sm font-medium text-slate-700">Advanced P&L Reports</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-green-100 p-2 rounded-full text-green-600"><Icon name="check" size={16}/></div>
+                                    <span className="text-sm font-medium text-slate-700">Strategy Analysis</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-green-100 p-2 rounded-full text-green-600"><Icon name="check" size={16}/></div>
+                                    <span className="text-sm font-medium text-slate-700">Secure Cloud Sync</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="md:w-1/2 p-8 flex flex-col justify-center">
+                            <div className="bg-blue-50 border-2 border-blue-500 rounded-xl p-6 text-center pricing-card relative">
+                                <div className="absolute top-0 right-0 bg-blue-500 text-white text-xxs font-bold px-2 py-1 rounded-bl-lg rounded-tr-lg">MOST POPULAR</div>
+                                <h3 className="text-lg font-bold text-blue-900">PRO TRADER</h3>
+                                <div className="my-4">
+                                    <span className="text-4xl font-extrabold text-slate-800">₹499</span>
+                                    <span className="text-slate-500 text-sm">/ year</span>
+                                </div>
+                                <Button onClick={onSubscribe} variant="primary" className="w-full py-3 justify-center shadow-lg hover:shadow-xl transform transition">
+                                    Start 7-Day Free Trial
+                                </Button>
+                                <p className="text-xs text-slate-400 mt-3">No credit card required for trial.</p>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+            );
+        };
+
+        // --- FORMS (Same as before) ---
         const QuickLedgerForm = ({ data, onSubmit }) => {
             const [name, setName] = useState(''); const [type, setType] = useState(data.ledgerTypes[0]); const [ob, setOb] = useState('0'); const [isNewType, setIsNewType] = useState(false); const [customType, setCustomType] = useState('');
             const handleSubmit = (e) => { e.preventDefault(); const finalType = isNewType ? customType : type; if(name && finalType) { onSubmit({name, type: finalType, openingBalance: safeFloat(ob)}); setName(''); setOb('0'); } };
@@ -274,722 +409,40 @@
             );
         };
 
-        // --- SUB-VIEWS ---
-        
+        // --- SUB-VIEWS (Same as before, consolidated) ---
         const MastersView = ({ data, addLedger, addStockItem, deleteLedger, deleteStockItem, updateData, onBack, notify }) => {
             const [activeTab, setActiveTab] = useState('LEDGER');
             const [strategyName, setStrategyName] = useState('');
-            
-            const addStrategy = () => {
-                if(!strategyName) return;
-                updateData(p => ({ ...p, strategies: [...p.strategies, { id: generateID(), name: strategyName }] }));
-                setStrategyName('');
-                notify("Strategy Added");
-            };
-
-            const deleteStrategy = (id) => {
-                if(data.vouchers.some(v => v.strategyId === id)) return notify("Cannot Delete: Used in trades", "error");
-                updateData(p => ({ ...p, strategies: p.strategies.filter(s => s.id !== id) }));
-                notify("Strategy Deleted");
-            };
-
-            const saveExpenseTemplate = (ledgerId, charges) => {
-                updateData(p => ({
-                    ...p,
-                    settings: {
-                        ...p.settings,
-                        expenseTemplates: { ...p.settings.expenseTemplates, [ledgerId]: charges }
-                    }
-                }));
-                notify("Expense Template Saved");
-            };
-
-            return (
-                <div className="space-y-8">
-                    <div className="flex items-center gap-4">
-                        <button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button>
-                        <h2 className="text-2xl font-bold text-slate-800">Masters Setup</h2>
-                    </div>
-                    <div className="flex gap-4 border-b overflow-x-auto">
-                        <button onClick={() => setActiveTab('LEDGER')} className={`pb-2 px-4 font-medium whitespace-nowrap ${activeTab === 'LEDGER' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>Ledgers</button>
-                        <button onClick={() => setActiveTab('STOCK')} className={`pb-2 px-4 font-medium whitespace-nowrap ${activeTab === 'STOCK' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>Stocks</button>
-                        <button onClick={() => setActiveTab('STRATEGY')} className={`pb-2 px-4 font-medium whitespace-nowrap ${activeTab === 'STRATEGY' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>Strategies</button>
-                        <button onClick={() => setActiveTab('EXPENSES')} className={`pb-2 px-4 font-medium whitespace-nowrap ${activeTab === 'EXPENSES' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>Expense Templates</button>
-                    </div>
-
-                    {activeTab === 'LEDGER' && (
-                        <div className="grid grid-cols-2 gap-8 fade-in">
-                            <Card className="p-6 h-fit"><h3 className="font-bold border-b pb-2 mb-4">Create Ledger</h3><QuickLedgerForm data={data} onSubmit={addLedger} /></Card>
-                            <Card className="p-0 overflow-hidden max-h-96 overflow-y-auto"><table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500"><tr><th className="p-3">Name</th><th className="p-3">Type</th><th className="p-3 text-right"></th></tr></thead><tbody className="divide-y divide-slate-100">{data.ledgers.map(l => <tr key={l.id} className="hover:bg-slate-50"><td className="p-3 font-medium">{l.name}</td><td className="p-3 text-xs">{l.type}</td><td className="p-3 text-right"><button onClick={() => deleteLedger(l.id)} className="text-red-500 hover:text-red-700"><Icon name="trash-2" size={14} /></button></td></tr>)}</tbody></table></Card>
-                        </div>
-                    )}
-
-                    {activeTab === 'STOCK' && (
-                        <div className="grid grid-cols-2 gap-8 fade-in">
-                            <Card className="p-6 h-fit"><h3 className="font-bold border-b pb-2 mb-4">Create Stock Item</h3><QuickStockForm data={data} onSubmit={addStockItem} /></Card>
-                            <Card className="p-0 overflow-hidden max-h-96 overflow-y-auto"><table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500"><tr><th className="p-3">Symbol</th><th className="p-3">Group</th><th className="p-3 text-right"></th></tr></thead><tbody className="divide-y divide-slate-100">{data.stockItems.map(s => <tr key={s.id} className="hover:bg-slate-50"><td className="p-3 font-medium">{s.name}</td><td className="p-3 text-xs">{s.group}</td><td className="p-3 text-right"><button onClick={() => deleteStockItem(s.id)} className="text-red-500 hover:text-red-700"><Icon name="trash-2" size={14} /></button></td></tr>)}</tbody></table></Card>
-                        </div>
-                    )}
-
-                    {activeTab === 'STRATEGY' && (
-                        <div className="grid grid-cols-2 gap-8 fade-in">
-                            <Card className="p-6 h-fit">
-                                <h3 className="font-bold border-b pb-2 mb-4">Add Strategy</h3>
-                                <div className="flex gap-2">
-                                    <Input value={strategyName} onChange={e => setStrategyName(e.target.value)} placeholder="Strategy Name" />
-                                    <Button onClick={addStrategy}>Add</Button>
-                                </div>
-                            </Card>
-                            <Card className="p-0 overflow-hidden max-h-96 overflow-y-auto">
-                                <table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500"><tr><th className="p-3">Strategy Name</th><th className="p-3 text-right"></th></tr></thead><tbody className="divide-y divide-slate-100">{data.strategies.map(s => <tr key={s.id} className="hover:bg-slate-50"><td className="p-3 font-medium">{s.name}</td><td className="p-3 text-right"><button onClick={() => deleteStrategy(s.id)} className="text-red-500 hover:text-red-700"><Icon name="trash-2" size={14} /></button></td></tr>)}</tbody></table>
-                            </Card>
-                        </div>
-                    )}
-
-                    {activeTab === 'EXPENSES' && (
-                        <div className="fade-in">
-                            <ExpenseChargesMaster data={data} onSave={saveExpenseTemplate} />
-                        </div>
-                    )}
-                </div>
-            );
+            const addStrategy = () => { if(!strategyName) return; updateData(p => ({ ...p, strategies: [...p.strategies, { id: generateID(), name: strategyName }] })); setStrategyName(''); notify("Strategy Added"); };
+            const deleteStrategy = (id) => { if(data.vouchers.some(v => v.strategyId === id)) return notify("Cannot Delete: Used in trades", "error"); updateData(p => ({ ...p, strategies: p.strategies.filter(s => s.id !== id) })); notify("Strategy Deleted"); };
+            const saveExpenseTemplate = (ledgerId, charges) => { updateData(p => ({ ...p, settings: { ...p.settings, expenseTemplates: { ...p.settings.expenseTemplates, [ledgerId]: charges } } })); notify("Expense Template Saved"); };
+            return ( <div className="space-y-8"><div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800">Masters Setup</h2></div><div className="flex gap-4 border-b overflow-x-auto"><button onClick={() => setActiveTab('LEDGER')} className={`pb-2 px-4 font-medium whitespace-nowrap ${activeTab === 'LEDGER' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>Ledgers</button><button onClick={() => setActiveTab('STOCK')} className={`pb-2 px-4 font-medium whitespace-nowrap ${activeTab === 'STOCK' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>Stocks</button><button onClick={() => setActiveTab('STRATEGY')} className={`pb-2 px-4 font-medium whitespace-nowrap ${activeTab === 'STRATEGY' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>Strategies</button><button onClick={() => setActiveTab('EXPENSES')} className={`pb-2 px-4 font-medium whitespace-nowrap ${activeTab === 'EXPENSES' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>Expense Templates</button></div>{activeTab === 'LEDGER' && (<div className="grid grid-cols-2 gap-8 fade-in"><Card className="p-6 h-fit"><h3 className="font-bold border-b pb-2 mb-4">Create Ledger</h3><QuickLedgerForm data={data} onSubmit={addLedger} /></Card><Card className="p-0 overflow-hidden max-h-96 overflow-y-auto"><table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500"><tr><th className="p-3">Name</th><th className="p-3">Type</th><th className="p-3 text-right"></th></tr></thead><tbody className="divide-y divide-slate-100">{data.ledgers.map(l => <tr key={l.id} className="hover:bg-slate-50"><td className="p-3 font-medium">{l.name}</td><td className="p-3 text-xs">{l.type}</td><td className="p-3 text-right"><button onClick={() => deleteLedger(l.id)} className="text-red-500 hover:text-red-700"><Icon name="trash-2" size={14} /></button></td></tr>)}</tbody></table></Card></div>)}{activeTab === 'STOCK' && (<div className="grid grid-cols-2 gap-8 fade-in"><Card className="p-6 h-fit"><h3 className="font-bold border-b pb-2 mb-4">Create Stock Item</h3><QuickStockForm data={data} onSubmit={addStockItem} /></Card><Card className="p-0 overflow-hidden max-h-96 overflow-y-auto"><table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500"><tr><th className="p-3">Symbol</th><th className="p-3">Group</th><th className="p-3 text-right"></th></tr></thead><tbody className="divide-y divide-slate-100">{data.stockItems.map(s => <tr key={s.id} className="hover:bg-slate-50"><td className="p-3 font-medium">{s.name}</td><td className="p-3 text-xs">{s.group}</td><td className="p-3 text-right"><button onClick={() => deleteStockItem(s.id)} className="text-red-500 hover:text-red-700"><Icon name="trash-2" size={14} /></button></td></tr>)}</tbody></table></Card></div>)}{activeTab === 'STRATEGY' && (<div className="grid grid-cols-2 gap-8 fade-in"><Card className="p-6 h-fit"><h3 className="font-bold border-b pb-2 mb-4">Add Strategy</h3><div className="flex gap-2"><Input value={strategyName} onChange={e => setStrategyName(e.target.value)} placeholder="Strategy Name" /><Button onClick={addStrategy}>Add</Button></div></Card><Card className="p-0 overflow-hidden max-h-96 overflow-y-auto"><table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500"><tr><th className="p-3">Strategy Name</th><th className="p-3 text-right"></th></tr></thead><tbody className="divide-y divide-slate-100">{data.strategies.map(s => <tr key={s.id} className="hover:bg-slate-50"><td className="p-3 font-medium">{s.name}</td><td className="p-3 text-right"><button onClick={() => deleteStrategy(s.id)} className="text-red-500 hover:text-red-700"><Icon name="trash-2" size={14} /></button></td></tr>)}</tbody></table></Card></div>)}{activeTab === 'EXPENSES' && (<div className="fade-in"><ExpenseChargesMaster data={data} onSave={saveExpenseTemplate} /></div>)}</div> );
         };
 
         const ExpenseChargesMaster = ({ data, onSave }) => {
-            const [selectedLedger, setSelectedLedger] = useState('');
-            const [charges, setCharges] = useState([]);
-
-            useEffect(() => {
-                if (selectedLedger) {
-                    const saved = data.settings.expenseTemplates[selectedLedger];
-                    if (saved) {
-                        setCharges(saved);
-                    } else {
-                        const ledgerName = data.ledgers.find(l => l.id === selectedLedger)?.name.toLowerCase() || '';
-                        if (ledgerName.includes('zerodha')) setCharges(ZERODHA_DEFAULTS);
-                        else setCharges([{ id: generateID(), name: 'Brokerage', amount: 0 }]);
-                    }
-                } else {
-                    setCharges([]);
-                }
-            }, [selectedLedger, data.settings.expenseTemplates]);
-
-            const updateCharge = (idx, field, val) => {
-                const newCharges = [...charges];
-                newCharges[idx][field] = val;
-                setCharges(newCharges);
-            };
-            const addRow = () => setCharges([...charges, { id: generateID(), name: '', amount: 0 }]);
-            const removeRow = (idx) => setCharges(charges.filter((_, i) => i !== idx));
-
-            return (
-                <div className="grid grid-cols-3 gap-6">
-                    <Card className="p-6 h-fit col-span-1">
-                        <h3 className="font-bold border-b pb-2 mb-4">Select Broker</h3>
-                        <Select value={selectedLedger} onChange={e => setSelectedLedger(e.target.value)}>
-                            <option value="">-- Select --</option>
-                            {data.ledgers.filter(l => l.type === 'Broker').map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                        </Select>
-                        <p className="text-xs text-slate-500 mt-2">Select a broker to configure default expense charges for vouchers.</p>
-                    </Card>
-                    <Card className="p-6 col-span-2">
-                        <h3 className="font-bold border-b pb-2 mb-4 flex justify-between">Charge Template <button onClick={addRow} className="text-blue-600 text-xs hover:underline">+ Add Charge</button></h3>
-                        {selectedLedger ? (
-                            <div className="space-y-2">
-                                {charges.map((c, i) => (
-                                    <div key={i} className="flex gap-2">
-                                        <input className="flex-1 border p-2 rounded text-sm" placeholder="Charge Name" value={c.name} onChange={e => updateCharge(i, 'name', e.target.value)} />
-                                        <input type="number" className="w-32 border p-2 rounded text-sm" placeholder="Default Amount" value={c.amount} onChange={e => updateCharge(i, 'amount', e.target.value)} />
-                                        <button onClick={() => removeRow(i)} className="text-red-400 p-2"><Icon name="x" size={16}/></button>
-                                    </div>
-                                ))}
-                                <div className="mt-4 border-t pt-4">
-                                    <Button onClick={() => onSave(selectedLedger, charges)}>Save Template</Button>
-                                </div>
-                            </div>
-                        ) : <p className="text-slate-400 italic">Select a broker first.</p>}
-                    </Card>
-                </div>
-            );
+            const [selectedLedger, setSelectedLedger] = useState(''); const [charges, setCharges] = useState([]);
+            useEffect(() => { if (selectedLedger) { const saved = data.settings.expenseTemplates[selectedLedger]; if (saved) { setCharges(saved); } else { const ledgerName = data.ledgers.find(l => l.id === selectedLedger)?.name.toLowerCase() || ''; if (ledgerName.includes('zerodha')) setCharges(ZERODHA_DEFAULTS); else setCharges([{ id: generateID(), name: 'Brokerage', amount: 0 }]); } } else { setCharges([]); } }, [selectedLedger, data.settings.expenseTemplates]);
+            const updateCharge = (idx, field, val) => { const newCharges = [...charges]; newCharges[idx][field] = val; setCharges(newCharges); }; const addRow = () => setCharges([...charges, { id: generateID(), name: '', amount: 0 }]); const removeRow = (idx) => setCharges(charges.filter((_, i) => i !== idx));
+            return ( <div className="grid grid-cols-3 gap-6"><Card className="p-6 h-fit col-span-1"><h3 className="font-bold border-b pb-2 mb-4">Select Broker</h3><Select value={selectedLedger} onChange={e => setSelectedLedger(e.target.value)}><option value="">-- Select --</option>{data.ledgers.filter(l => l.type === 'Broker').map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</Select><p className="text-xs text-slate-500 mt-2">Select a broker to configure default expense charges for vouchers.</p></Card><Card className="p-6 col-span-2"><h3 className="font-bold border-b pb-2 mb-4 flex justify-between">Charge Template <button onClick={addRow} className="text-blue-600 text-xs hover:underline">+ Add Charge</button></h3>{selectedLedger ? (<div className="space-y-2">{charges.map((c, i) => (<div key={i} className="flex gap-2"><input className="flex-1 border p-2 rounded text-sm" placeholder="Charge Name" value={c.name} onChange={e => updateCharge(i, 'name', e.target.value)} /><input type="number" className="w-32 border p-2 rounded text-sm" placeholder="Default Amount" value={c.amount} onChange={e => updateCharge(i, 'amount', e.target.value)} /><button onClick={() => removeRow(i)} className="text-red-400 p-2"><Icon name="x" size={16}/></button></div>))}<div className="mt-4 border-t pt-4"><Button onClick={() => onSave(selectedLedger, charges)}>Save Template</Button></div></div>) : <p className="text-slate-400 italic">Select a broker first.</p>}</Card></div> );
         };
 
         const StrategyReport = ({ data, onBack }) => {
             const [dateRange, setDateRange] = useState(getFinancialYearDates());
-            
-            const report = useMemo(() => {
-                const stats = {};
-                // Initialize stats including rule-based breakdown
-                data.strategies.forEach(s => { 
-                    stats[s.id] = { 
-                        name: s.name, 
-                        net: 0, 
-                        count: 0, 
-                        rulesFollowedNet: 0, 
-                        rulesFollowedCount: 0,
-                        rulesBrokenNet: 0, 
-                        rulesBrokenCount: 0
-                    }; 
-                });
-                stats['none'] = { 
-                    name: 'Unassigned', 
-                    net: 0, 
-                    count: 0, 
-                    rulesFollowedNet: 0, 
-                    rulesFollowedCount: 0,
-                    rulesBrokenNet: 0, 
-                    rulesBrokenCount: 0
-                };
-
-                const tradeGroups = {};
-                data.vouchers.filter(v => v.type === VOUCHER_TYPES.TRADE).forEach(v => {
-                    if(!tradeGroups[v.refNo]) {
-                        tradeGroups[v.refNo] = { 
-                            netFlow: 0, 
-                            strategyId: v.strategyId || 'none', 
-                            rulesFollowed: v.rulesFollowed || false,
-                            date: v.date, 
-                            completed: false 
-                        };
-                    }
-                    if(v.status === 'Complete') tradeGroups[v.refNo].completed = true;
-                    if(v.strategyId) tradeGroups[v.refNo].strategyId = v.strategyId;
-                    // Always take the latest rule status if updated
-                    if(v.rulesFollowed !== undefined) tradeGroups[v.refNo].rulesFollowed = v.rulesFollowed;
-                    
-                    v.lines.forEach(l => {
-                        const val = safeFloat(l.qty) * safeFloat(l.rate);
-                        if(l.type === 'Buy') tradeGroups[v.refNo].netFlow -= val;
-                        else tradeGroups[v.refNo].netFlow += val;
-                    });
-                });
-
-                Object.values(tradeGroups).forEach(tg => {
-                    if (tg.date >= dateRange.start && tg.date <= dateRange.end) {
-                        const sId = stats[tg.strategyId] ? tg.strategyId : 'none';
-                        if (tg.completed) {
-                            stats[sId].count++;
-                            stats[sId].net += tg.netFlow;
-                            
-                            // Separate logic for Rules Followed vs Broken
-                            if (tg.rulesFollowed) {
-                                stats[sId].rulesFollowedCount++;
-                                stats[sId].rulesFollowedNet += tg.netFlow;
-                            } else {
-                                stats[sId].rulesBrokenCount++;
-                                stats[sId].rulesBrokenNet += tg.netFlow;
-                            }
-                        }
-                    }
-                });
-
-                return Object.values(stats).filter(s => s.count > 0 || s.net !== 0);
-            }, [data, dateRange]);
-
-            return (
-                <div className="space-y-6">
-                    <div className="flex items-center gap-4">
-                        <button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button>
-                        <h2 className="text-2xl font-bold text-slate-800">Strategy & Discipline Report</h2>
-                    </div>
-                    <div className="flex justify-end"><DateRangePicker dateRange={dateRange} setDateRange={setDateRange} /></div>
-                    <Card className="overflow-hidden">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-slate-100 text-slate-600">
-                                <tr>
-                                    <th className="p-3">Strategy</th>
-                                    <th className="p-3 text-right">Total Trades</th>
-                                    <th className="p-3 text-right bg-blue-50 text-blue-700 border-l border-white">Rules Followed (P&L)</th>
-                                    <th className="p-3 text-right bg-red-50 text-red-700 border-l border-white">Rules Broken (P&L)</th>
-                                    <th className="p-3 text-right border-l">Net P&L</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {report.map((s, i) => (
-                                    <tr key={i} className="hover:bg-slate-50">
-                                        <td className="p-3 font-medium text-slate-700">{s.name}</td>
-                                        <td className="p-3 text-right">{s.count}</td>
-                                        
-                                        {/* Rules Followed Column */}
-                                        <td className="p-3 text-right bg-blue-50 border-l border-white">
-                                            <div className={`font-bold ${s.rulesFollowedNet >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                {formatMoney(s.rulesFollowedNet)}
-                                            </div>
-                                            <div className="text-xs text-slate-400">{s.rulesFollowedCount} trades</div>
-                                        </td>
-
-                                        {/* Rules Broken Column */}
-                                        <td className="p-3 text-right bg-red-50 border-l border-white">
-                                            <div className={`font-bold ${s.rulesBrokenNet >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                {formatMoney(s.rulesBrokenNet)}
-                                            </div>
-                                            <div className="text-xs text-slate-400">{s.rulesBrokenCount} trades</div>
-                                        </td>
-
-                                        {/* Total P&L */}
-                                        <td className={`p-3 text-right font-bold text-base border-l ${s.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                            {formatMoney(s.net)}
-                                        </td>
-                                    </tr>
-                                ))}
-                                {report.length === 0 && <tr><td colSpan="5" className="p-4 text-center text-slate-400">No completed trades in selected period</td></tr>}
-                            </tbody>
-                        </table>
-                    </Card>
-                </div>
-            );
+            const report = useMemo(() => { const stats = {}; data.strategies.forEach(s => { stats[s.id] = { name: s.name, profit: 0, loss: 0, net: 0, count: 0, invested: 0, rulesFollowedNet: 0, rulesFollowedCount: 0, rulesBrokenNet: 0, rulesBrokenCount: 0 }; }); stats['none'] = { name: 'Unassigned', profit: 0, loss: 0, net: 0, count: 0, invested: 0, rulesFollowedNet: 0, rulesFollowedCount: 0, rulesBrokenNet: 0, rulesBrokenCount: 0 }; const tradeGroups = {}; data.vouchers.filter(v => v.type === VOUCHER_TYPES.TRADE).forEach(v => { if(!tradeGroups[v.refNo]) { tradeGroups[v.refNo] = { netFlow: 0, strategyId: v.strategyId || 'none', rulesFollowed: v.rulesFollowed || false, date: v.date, completed: false }; } if(v.status === 'Complete') tradeGroups[v.refNo].completed = true; if(v.strategyId) tradeGroups[v.refNo].strategyId = v.strategyId; if(v.rulesFollowed !== undefined) tradeGroups[v.refNo].rulesFollowed = v.rulesFollowed; v.lines.forEach(l => { const val = safeFloat(l.qty) * safeFloat(l.rate); if(l.type === 'Buy') tradeGroups[v.refNo].netFlow -= val; else tradeGroups[v.refNo].netFlow += val; }); }); Object.values(tradeGroups).forEach(tg => { if (tg.date >= dateRange.start && tg.date <= dateRange.end) { const sId = stats[tg.strategyId] ? tg.strategyId : 'none'; if (tg.completed) { stats[sId].count++; stats[sId].net += tg.netFlow; if (tg.rulesFollowed) { stats[sId].rulesFollowedCount++; stats[sId].rulesFollowedNet += tg.netFlow; } else { stats[sId].rulesBrokenCount++; stats[sId].rulesBrokenNet += tg.netFlow; } } } }); return Object.values(stats).filter(s => s.count > 0 || s.net !== 0); }, [data, dateRange]);
+            return ( <div className="space-y-6"><div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800">Strategy & Discipline Report</h2></div><div className="flex justify-end"><DateRangePicker dateRange={dateRange} setDateRange={setDateRange} /></div><Card className="overflow-hidden"><table className="w-full text-sm text-left"><thead className="bg-slate-100 text-slate-600"><tr><th className="p-3">Strategy</th><th className="p-3 text-right">Total Trades</th><th className="p-3 text-right bg-blue-50 text-blue-700 border-l border-white">Rules Followed (P&L)</th><th className="p-3 text-right bg-red-50 text-red-700 border-l border-white">Rules Broken (P&L)</th><th className="p-3 text-right border-l">Net P&L</th></tr></thead><tbody className="divide-y divide-slate-100">{report.map((s, i) => ( <tr key={i} className="hover:bg-slate-50"><td className="p-3 font-medium text-slate-700">{s.name}</td><td className="p-3 text-right">{s.count}</td><td className="p-3 text-right bg-blue-50 border-l border-white"><div className={`font-bold ${s.rulesFollowedNet >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatMoney(s.rulesFollowedNet)}</div><div className="text-xs text-slate-400">{s.rulesFollowedCount} trades</div></td><td className="p-3 text-right bg-red-50 border-l border-white"><div className={`font-bold ${s.rulesBrokenNet >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatMoney(s.rulesBrokenNet)}</div><div className="text-xs text-slate-400">{s.rulesBrokenCount} trades</div></td><td className={`p-3 text-right font-bold text-base border-l ${s.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatMoney(s.net)}</td></tr> ))}{report.length === 0 && <tr><td colSpan="5" className="p-4 text-center text-slate-400">No completed trades in selected period</td></tr>}</tbody></table></Card></div> );
         };
 
         const ProfitLoss = ({ metrics, dateRange, setDateRange, onBack, onDrillDown }) => {
             const [expandedBroker, setExpandedBroker] = useState(null);
-
-            return (
-             <div className="space-y-6 max-w-4xl mx-auto">
-                <div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800 text-center flex-1">Profit & Loss A/c</h2></div>
-                <div className="flex justify-center"><DateRangePicker dateRange={dateRange} setDateRange={setDateRange} /></div>
-                
-                <div className="grid grid-cols-2 gap-6">
-                    <Card className="p-8 text-center bg-gradient-to-br from-slate-50 to-white">
-                        <div className="text-sm text-slate-500 uppercase tracking-widest mb-2">Net Realized Profit</div>
-                        <div className={`text-4xl font-bold ${metrics.realizedPL >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatMoney(metrics.realizedPL)}</div>
-                    </Card>
-                    <Card className="p-8 text-center bg-gradient-to-br from-blue-50 to-white">
-                        <div className="text-sm text-blue-500 uppercase tracking-widest mb-2">ROI (Return on Investment)</div>
-                        <div className="text-4xl font-bold text-blue-700">{metrics.roi.toFixed(2)}%</div>
-                        <div className="text-xs text-slate-400 mt-2">Based on Total Capital ({formatMoney(metrics.capital + metrics.totalFundAdded)})</div>
-                    </Card>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4">
-                    {Object.values(metrics.brokerMetrics).map(m => ( 
-                        <Card key={m.id} className="p-0 overflow-hidden">
-                            <div className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50" onClick={() => onDrillDown(m.id)}>
-                                <div className="flex items-center gap-3">
-                                    <span className="font-bold text-slate-700 text-lg">{m.name}</span>
-                                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Click for Ledger</span>
-                                </div>
-                                <div className="text-right">
-                                    <span className={`font-mono font-bold text-lg ${m.realizedPL >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatMoney(m.realizedPL)}</span>
-                                    <div className="text-xs text-slate-400">Net P&L</div>
-                                </div>
-                            </div>
-                            
-                            <div className="bg-slate-50 border-t p-3 text-sm">
-                                <div className="flex justify-between font-semibold text-slate-500 mb-2 cursor-pointer" onClick={(e) => { e.stopPropagation(); setExpandedBroker(expandedBroker === m.id ? null : m.id); }}>
-                                    <span>Expenses & Charges {expandedBroker === m.id ? '▼' : '▶'}</span>
-                                    <span>{formatMoney(m.totalExpenses)}</span>
-                                </div>
-                                {expandedBroker === m.id && (
-                                    <div className="pl-4 space-y-1 border-l-2 border-slate-200 ml-1">
-                                        {Object.entries(m.expenseBreakdown).map(([key, val]) => (
-                                            <div key={key} className="flex justify-between text-slate-600">
-                                                <span>{key}</span>
-                                                <span className="font-mono">{formatMoney(val)}</span>
-                                            </div>
-                                        ))}
-                                        {Object.keys(m.expenseBreakdown).length === 0 && <div className="text-slate-400 italic">No detailed breakdown available</div>}
-                                    </div>
-                                )}
-                            </div>
-                        </Card> 
-                    ))}
-                </div>
-            </div>
-            );
+            return ( <div className="space-y-6 max-w-4xl mx-auto"><div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800 text-center flex-1">Profit & Loss A/c</h2></div><div className="flex justify-center"><DateRangePicker dateRange={dateRange} setDateRange={setDateRange} /></div><div className="grid grid-cols-2 gap-6"><Card className="p-8 text-center bg-gradient-to-br from-slate-50 to-white"><div className="text-sm text-slate-500 uppercase tracking-widest mb-2">Net Realized Profit</div><div className={`text-4xl font-bold ${metrics.realizedPL >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatMoney(metrics.realizedPL)}</div></Card><Card className="p-8 text-center bg-gradient-to-br from-blue-50 to-white"><div className="text-sm text-blue-500 uppercase tracking-widest mb-2">ROI (Return on Investment)</div><div className="text-4xl font-bold text-blue-700">{metrics.roi.toFixed(2)}%</div><div className="text-xs text-slate-400 mt-2">Based on Total Capital ({formatMoney(metrics.capital + metrics.totalFundAdded)})</div></Card></div><div className="grid grid-cols-1 gap-4">{Object.values(metrics.brokerMetrics).map(m => ( <Card key={m.id} className="p-0 overflow-hidden"><div className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50" onClick={() => onDrillDown(m.id)}><div className="flex items-center gap-3"><span className="font-bold text-slate-700 text-lg">{m.name}</span><span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Click for Ledger</span></div><div className="text-right"><span className={`font-mono font-bold text-lg ${m.realizedPL >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatMoney(m.realizedPL)}</span><div className="text-xs text-slate-400">Net P&L</div></div></div><div className="bg-slate-50 border-t p-3 text-sm"><div className="flex justify-between font-semibold text-slate-500 mb-2 cursor-pointer" onClick={(e) => { e.stopPropagation(); setExpandedBroker(expandedBroker === m.id ? null : m.id); }}><span>Expenses & Charges {expandedBroker === m.id ? '▼' : '▶'}</span><span>{formatMoney(m.totalExpenses)}</span></div>{expandedBroker === m.id && (<div className="pl-4 space-y-1 border-l-2 border-slate-200 ml-1">{Object.entries(m.expenseBreakdown).map(([key, val]) => (<div key={key} className="flex justify-between text-slate-600"><span>{key}</span><span className="font-mono">{formatMoney(val)}</span></div>))}{Object.keys(m.expenseBreakdown).length === 0 && <div className="text-slate-400 italic">No detailed breakdown available</div>}</div>)}</div></Card> ))}</div></div> );
         };
 
-        const BalanceSheet = ({ metrics, dateRange, setDateRange, onBack, onDrillDown }) => (
-            <div className="space-y-6 max-w-4xl mx-auto">
-                <div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800 text-center flex-1">Balance Sheet</h2></div>
-                <div className="flex justify-center"><DateRangePicker dateRange={dateRange} setDateRange={setDateRange} /></div>
-                
-                <div className="grid grid-cols-2 gap-0 border border-slate-300 bg-white shadow-sm">
-                    <div className="border-r border-slate-300"><div className="bg-slate-100 p-3 font-bold text-center border-b">Liabilities & Equity</div><div className="p-4 space-y-2"><div className="flex justify-between"><span>Capital Account</span><span className="font-mono">{formatMoney(metrics.capital)}</span></div><div className="flex justify-between text-emerald-600"><span>P&L (Surplus)</span><span className="font-mono">{formatMoney(metrics.realizedPL)}</span></div><div className="border-t pt-2 flex justify-between font-bold text-lg mt-10"><span>Total</span><span className="font-mono">{formatMoney(metrics.capital + metrics.realizedPL)}</span></div></div></div>
-                    <div>
-                        <div className="bg-slate-100 p-3 font-bold text-center border-b">Assets</div>
-                        <div className="p-4 space-y-2">
-                            <div className="flex justify-between"><span>Broker Cash Balances</span><span className="font-mono">{formatMoney(metrics.totalBrokerBalance)}</span></div>
-                            <div className="pl-2 space-y-1">
-                                {Object.values(metrics.brokerMetrics).map(m => (
-                                    <div key={m.id} className="flex justify-between text-xs text-slate-500 cursor-pointer hover:text-blue-600" onClick={() => onDrillDown(m.id)}>
-                                        <span>↳ {m.name}</span>
-                                        <span>{formatMoney(m.balance)}</span>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="flex justify-between mt-2"><span>Stock Holdings Value</span><span className="font-mono">{formatMoney(metrics.investedValue)}</span></div>
-                            <div className="border-t pt-2 flex justify-between font-bold text-lg mt-4"><span>Total</span><span className="font-mono">{formatMoney(metrics.totalBrokerBalance + metrics.investedValue)}</span></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-
-        const MonthlyRegister = ({ data, setView, setDateRange, onBack }) => {
-            const months = useMemo(() => { const map = {}; data.vouchers.forEach(v => { const d = new Date(v.date); const key = `${d.getFullYear()}-${d.getMonth()}`; if(!map[key]) map[key] = { date: d, count: 0, dr: 0, cr: 0 }; map[key].count++; }); return Object.values(map).sort((a,b) => a.date - b.date); }, [data.vouchers]);
-            const handleMonthClick = (mDate) => { const y = mDate.getFullYear(), m = mDate.getMonth(); const start = new Date(y, m, 1).toISOString().split('T')[0]; const end = new Date(y, m + 1, 0).toISOString().split('T')[0]; setDateRange({ start, end }); setView('REPORT_DAYBOOK'); };
-            return ( <div className="space-y-6"><div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800">Monthly Register</h2></div><Card className="overflow-hidden"><table className="w-full text-sm text-left"><thead className="bg-slate-100 text-slate-600"><tr><th className="p-3">Month</th><th className="p-3 text-right">Transactions</th><th className="p-3 text-center">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{months.map((m, i) => ( <tr key={i} onClick={() => handleMonthClick(m.date)} className="hover:bg-blue-50 cursor-pointer group"><td className="p-3 font-medium text-slate-700">{getMonthName(m.date)}</td><td className="p-3 text-right font-mono">{m.count}</td><td className="p-3 text-center text-blue-500 opacity-0 group-hover:opacity-100">Open <Icon name="arrow-right" size={12}/></td></tr> ))}</tbody></table></Card></div> );
-        };
-
-        const DayBook = ({ data, onDelete, onEdit, onBack }) => {
-            const todayStr = new Date().toISOString().split('T')[0];
-            const [dateRange, setDateRange] = useState({ start: todayStr, end: todayStr });
-            const [typeFilter, setTypeFilter] = useState('ALL');
-            const filtered = data.vouchers.filter(v => { const dateMatch = v.date >= dateRange.start && v.date <= dateRange.end; const typeMatch = typeFilter === 'ALL' || v.type.toUpperCase() === typeFilter; return dateMatch && typeMatch; }).sort((a,b) => new Date(b.date) - new Date(a.date));
-            return ( <div className="space-y-6"><div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800">Day Book</h2></div><div className="flex flex-col sm:flex-row justify-between items-center gap-4"><div className="flex gap-2"><button onClick={() => setTypeFilter('ALL')} className={`px-3 py-1 rounded text-xs font-bold ${typeFilter === 'ALL' ? 'bg-blue-600 text-white' : 'bg-slate-100'}`}>All</button><button onClick={() => setTypeFilter('TRADE')} className={`px-3 py-1 rounded text-xs font-bold ${typeFilter === 'TRADE' ? 'bg-blue-600 text-white' : 'bg-slate-100'}`}>Trade</button><button onClick={() => setTypeFilter('FUND')} className={`px-3 py-1 rounded text-xs font-bold ${typeFilter === 'FUND' ? 'bg-blue-600 text-white' : 'bg-slate-100'}`}>Fund</button></div><DateRangePicker dateRange={dateRange} setDateRange={setDateRange} /></div><Card className="overflow-hidden"><table className="w-full text-sm text-left"><thead className="bg-slate-100 text-slate-600"><tr><th className="p-3">Date</th><th className="p-3">Ref</th><th className="p-3">Type</th><th className="p-3">Broker/Ledger</th><th className="p-3">Details</th><th className="p-3">Amount</th><th className="p-3 text-center">Actions</th></tr></thead><tbody className="divide-y divide-slate-100 cursor-pointer">{filtered.map(v => { let brokerName = data.ledgers.find(l => l.id === (v.brokerId || v.ledgerId))?.name || '-'; 
-            let details = '';
-            let val = 0;
-            if (v.type === VOUCHER_TYPES.TRADE) {
-                details = `${v.status} Trade`;
-                val = v.lines ? v.lines.reduce((acc, l) => acc + (safeFloat(l.qty) * safeFloat(l.rate)), 0) : 0;
-            } else if (v.type === VOUCHER_TYPES.FUND) {
-                details = `${v.subType}`;
-                val = v.amount;
-            } else if (v.type === VOUCHER_TYPES.EXPENSE) {
-                details = `Expense` + (v.charges?.length ? ` (${v.charges.length})` : '');
-                val = v.amount;
-            }
-            return <tr key={v.id} onClick={() => onEdit(v)} className="hover:bg-blue-50 group transition-colors"><td className="p-3">{formatDate(v.date)}</td><td className="p-3 font-mono text-xs">{v.refNo}</td><td className="p-3"><span className={`px-2 py-1 rounded text-xxs font-bold uppercase ${v.type === 'Trade' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{v.type}</span></td><td className="p-3 font-medium text-slate-700">{brokerName}</td><td className="p-3 text-slate-500">{details}</td><td className="p-3 text-right font-mono">{formatMoney(val)}</td><td className="p-3 text-center flex justify-center gap-2"><button onClick={(e) => { e.stopPropagation(); onEdit(v); }} className="text-blue-400 hover:text-blue-600 p-1"><Icon name="pencil" size={14}/></button><button onClick={(e) => { e.stopPropagation(); onDelete(v.id); }} className="text-red-300 hover:text-red-600 p-1"><Icon name="trash-2" size={14}/></button></td></tr> })}</tbody></table></Card></div> );
-        };
-
-        const ToolsView = ({ data, updateData, restoreVoucher, permanentDelete, requestConfirm, notify, onBack }) => {
-            const fileInputRef = useRef(null);
-
-            const handleExport = () => {
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `tradebook_backup_${new Date().toISOString().split('T')[0]}.json`;
-                a.click();
-            };
-
-            const handleImport = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                
-                requestConfirm(
-                    "Overwrite Data?",
-                    "This will replace all current data with the backup file. This cannot be undone.",
-                    () => {
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                            try {
-                                const parsed = JSON.parse(ev.target.result);
-                                if (parsed.vouchers && parsed.ledgers) {
-                                    updateData(() => parsed);
-                                    notify("Data Restored Successfully!", "success");
-                                } else {
-                                    notify("Invalid Backup File", "error");
-                                }
-                            } catch (err) { notify("Error reading file", "error"); }
-                        };
-                        reader.readAsText(file);
-                    }
-                );
-            };
-
-            const handleResetFY = () => {
-                requestConfirm(
-                    "Close Financial Year?",
-                    "This will archive all vouchers. Ensure you have exported a backup first.",
-                    () => {
-                        handleExport();
-                        notify("FY Reset requires manual balance carry forward (Not Implemented). Data exported.", "warning");
-                    }
-                );
-            };
-
-            return (
-                <div className="space-y-8">
-                    <div className="flex items-center gap-4">
-                        <button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button>
-                        <h2 className="text-2xl font-bold text-slate-800">Tools & Settings</h2>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-6">
-                        <Card className="p-6 space-y-4">
-                            <h3 className="font-bold border-b pb-2 flex items-center gap-2"><Icon name="save" className="text-blue-500"/> Data Management</h3>
-                            <div className="flex flex-col gap-3">
-                                <Button onClick={handleExport} variant="secondary">Export Backup (JSON)</Button>
-                                <div className="relative">
-                                    <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept=".json" />
-                                    <Button onClick={() => fileInputRef.current.click()} variant="secondary" className="w-full">Import / Restore Data</Button>
-                                </div>
-                                <div className="pt-4 border-t">
-                                    <Button onClick={handleResetFY} variant="danger" className="w-full justify-center">Start New Financial Year</Button>
-                                    <p className="text-xs text-red-400 mt-2 text-center">Caution: Archives current data.</p>
-                                </div>
-                            </div>
-                        </Card>
-
-                        <Card className="p-6 space-y-4">
-                            <h3 className="font-bold border-b pb-2 flex items-center gap-2"><Icon name="trash-2" className="text-red-500"/> Recycle Bin ({data.recycleBin.length})</h3>
-                            <div className="h-64 overflow-y-auto space-y-2">
-                                {data.recycleBin.length === 0 && <p className="text-slate-400 text-sm text-center py-4">Bin is empty</p>}
-                                {data.recycleBin.map(v => (
-                                    <div key={v.id} className="text-sm border p-2 rounded flex justify-between items-center bg-red-50">
-                                        <div>
-                                            <div className="font-bold">{v.refNo}</div>
-                                            <div className="text-xs text-slate-500">{formatDate(v.date)} | {v.type}</div>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => restoreVoucher(v.id)} className="text-blue-600 hover:underline text-xs">Restore</button>
-                                            <button onClick={() => permanentDelete(v.id)} className="text-red-600 hover:underline text-xs">Delete</button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </Card>
-                    </div>
-                </div>
-            );
-        };
-
-        const Dashboard = ({ data, metrics, dateRange, setDateRange }) => {
-            return (
-                <div className="space-y-6">
-                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                        <h2 className="text-2xl font-bold text-slate-800">Financial Dashboard</h2>
-                        <DateRangePicker dateRange={dateRange} setDateRange={setDateRange} />
-                    </div>
-                    
-                    <div className="grid grid-cols-4 gap-4">
-                        <StatCard title="Net Worth" value={metrics.netWorth} icon="landmark" color="slate" />
-                        <StatCard title="Cash Balance" value={metrics.totalBrokerBalance} icon="wallet" color="blue" />
-                        <StatCard title={`P&L (Selected Period)`} value={metrics.realizedPL} icon="trending-up" color={metrics.realizedPL >= 0 ? "emerald" : "red"} />
-                        <StatCard title="Holdings Value" value={metrics.investedValue} icon="briefcase" color="purple" />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-6">
-                        <Card className="p-6">
-                            <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><Icon name="wallet" /> Broker Performance (In Period)</h3>
-                            <div className="space-y-3">
-                                {Object.values(metrics.brokerMetrics).map((m, i) => (
-                                    <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded border border-slate-100">
-                                        <div className="flex flex-col">
-                                            <span className="text-slate-800 font-medium">{m.name}</span>
-                                            <span className="text-xs text-slate-500">Current Bal: {formatMoney(m.balance)}</span>
-                                        </div>
-                                        <div className="text-right">
-                                            <span className={`block font-bold ${m.realizedPL >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatMoney(m.realizedPL)}</span>
-                                            <span className="text-xs text-slate-400">P&L</span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </Card>
-                         <Card className="p-6">
-                            <h3 className="font-bold text-slate-700 mb-4">Recent Activity</h3>
-                            <div className="space-y-2">
-                                {data.vouchers.slice(-5).reverse().map(v => (
-                                    <div key={v.id} className="flex justify-between text-sm border-b border-slate-100 pb-2">
-                                        <div><span className="font-medium text-slate-800">{v.type}</span><span className="text-slate-400 mx-2">|</span><span className="text-slate-500">{formatDate(v.date)}</span></div>
-                                        <div className="font-mono text-xs bg-slate-100 px-2 py-1 rounded">{v.refNo}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </Card>
-                    </div>
-                </div>
-            );
-        };
-
-        const TradeVoucher = ({ data, metrics, onSave, editingVoucher, onOpenLedgerCreate, onOpenStockCreate, notify, onBack, onAddStrategy, requestConfirm }) => {
-            const [mode, setMode] = useState('NEW');
-            const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-            const [brokerId, setBrokerId] = useState('');
-            const [status, setStatus] = useState('Hold');
-            const [lines, setLines] = useState([{ id: generateID(), type: 'Buy', scriptId: '', qty: 0, rate: 0 }]);
-            const [refNo, setRefNo] = useState('');
-            const [selectedRef, setSelectedRef] = useState('');
-            const [strategyId, setStrategyId] = useState('');
-            const [rulesFollowed, setRulesFollowed] = useState(false);
-            const [newStrategyName, setNewStrategyName] = useState('');
-            const [isAddingStrategy, setIsAddingStrategy] = useState(false);
-            const [forceSave, setForceSave] = useState(false);
-
-            useEffect(() => {
-                if (editingVoucher) {
-                    setMode('EDIT'); setDate(editingVoucher.date); setBrokerId(editingVoucher.brokerId); setStatus(editingVoucher.status); setLines(editingVoucher.lines); setRefNo(editingVoucher.refNo);
-                    if(editingVoucher.strategyId) setStrategyId(editingVoucher.strategyId);
-                    setRulesFollowed(editingVoucher.rulesFollowed || false);
-                } else {
-                    setMode('NEW'); 
-                    setLines([{ id: generateID(), type: 'Buy', scriptId: '', qty: 0, rate: 0 }]); 
-                    setBrokerId(''); setStatus('Hold'); setStrategyId(''); setRulesFollowed(false);
-                }
-                setForceSave(false);
-            }, [editingVoucher]);
-
-            useEffect(() => {
-                if(mode === 'NEW' && !editingVoucher) setRefNo(generateRefNo('Trade', date, data.vouchers));
-            }, [date, mode, data.vouchers, editingVoucher]);
-
-            // Lifecycle Safe Filter: Exclude completed trades from dropdown
-            const completedRefs = new Set(data.vouchers.filter(v => v.status === 'Complete').map(v => v.refNo));
-            const uniqueOpenRefs = [...new Set(data.vouchers
-                .filter(v => v.type === VOUCHER_TYPES.TRADE && v.refNo && !completedRefs.has(v.refNo))
-                .map(v => v.refNo)
-            )];
-
-            const handleRefSelection = (ref) => {
-                setSelectedRef(ref);
-                if (ref) {
-                    const prevVoucher = data.vouchers.find(v => v.refNo === ref);
-                    if (prevVoucher) { 
-                        setBrokerId(prevVoucher.brokerId); setRefNo(ref); setLines([{ id: generateID(), type: 'Buy', scriptId: '', qty: 0, rate: 0 }]); 
-                        if(prevVoucher.strategyId) setStrategyId(prevVoucher.strategyId);
-                        setRulesFollowed(prevVoucher.rulesFollowed || false);
-                    }
-                }
-            };
-            const updateLine = (idx, field, val) => { const newLines = [...lines]; newLines[idx][field] = val; setLines(newLines); };
-            const addLine = () => setLines([...lines, { id: generateID(), type: 'Buy', scriptId: '', qty: 0, rate: 0 }]);
-            const removeLine = (idx) => setLines(lines.filter((_, i) => i !== idx));
-            const totalVal = lines.reduce((acc, l) => acc + (safeFloat(l.qty) * safeFloat(l.rate)), 0);
-            
-            const handleAddStrategy = () => {
-                if(newStrategyName) {
-                    onAddStrategy(newStrategyName);
-                    setNewStrategyName('');
-                    setIsAddingStrategy(false);
-                }
-            };
-
-            const validateTrade = () => {
-                if (!brokerId) return { valid: false, msg: "Select Broker" };
-                if (lines.some(l => !l.scriptId || l.qty <= 0)) return { valid: false, msg: "Invalid Lines: Check Script & Qty" };
-                let warningMsg = "";
-                const brokerMetric = metrics?.brokerMetrics?.[brokerId];
-                if (brokerMetric && brokerMetric.balance < 0) warningMsg = `Warning: ${brokerMetric.name} has negative balance.`;
-                return { valid: true, warning: warningMsg };
-            };
-
-            const proceedSave = () => {
-                onSave({ 
-                    id: mode === 'EDIT' ? editingVoucher.id : generateID(), 
-                    type: VOUCHER_TYPES.TRADE, 
-                    date, refNo, brokerId, status, strategyId, rulesFollowed,
-                    lines: lines.map(l => ({...l, qty: safeFloat(l.qty), rate: safeFloat(l.rate)})) 
-                }); 
-                
-                if (mode === 'NEW') setLines([{ id: generateID(), type: 'Buy', scriptId: '', qty: 0, rate: 0 }]);
-                else if (mode === 'EXISTING') { setLines([{ id: generateID(), type: 'Buy', scriptId: '', qty: 0, rate: 0 }]); notify("Transaction Saved! Add next leg.", "success"); }
-                setForceSave(false);
-            }
-
-            const handleSubmit = () => { 
-                const { valid, msg, warning } = validateTrade();
-                if (!valid) return notify(msg, "error");
-                
-                if (warning && !forceSave) {
-                    notify(warning + " Click save again to confirm.", "warning");
-                    setForceSave(true);
-                    return;
-                }
-
-                // SAFETY GUARDS
-                if (status === 'Complete') {
-                    requestConfirm(
-                        "Closing Trade?", 
-                        `This will mark Reference #${refNo} as COMPLETE. P&L will be realized and this trade will be removed from active lists.`,
-                        proceedSave,
-                        "warning"
-                    );
-                    return;
-                }
-
-                if (mode === 'EDIT' && editingVoucher.status === 'Complete' && status === 'Hold') {
-                    requestConfirm(
-                        "Re-opening Trade?", 
-                        `You are changing status from Complete to Hold. P&L will move back to floating/unrealized.`,
-                        proceedSave,
-                        "warning"
-                    );
-                    return;
-                }
-
-                proceedSave();
-            };
-
-            return (
-                <div className="max-w-4xl mx-auto space-y-6">
-                    <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-4">
-                            <button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button>
-                            <h2 className="text-2xl font-bold text-slate-800">{mode === 'EDIT' ? "Edit Transaction" : "Trade Entry"}</h2>
-                        </div>
-                        {!editingVoucher && (
-                            <div className="flex bg-slate-200 p-1 rounded-lg">
-                                <button onClick={() => setMode('NEW')} className={`px-4 py-1 rounded-md text-sm font-bold transition-all ${mode === 'NEW' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>New Trade</button>
-                                <button onClick={() => setMode('EXISTING')} className={`px-4 py-1 rounded-md text-sm font-bold transition-all ${mode === 'EXISTING' ? 'bg-white shadow text-purple-600' : 'text-slate-500'}`}>Existing Trade</button>
-                            </div>
-                        )}
-                    </div>
-                    
-                    <Card className={`p-6 border-t-4 ${mode === 'EXISTING' ? 'border-purple-500' : 'border-blue-500'}`}>
-                        {mode === 'EXISTING' && (
-                            <div className="mb-6 bg-purple-50 p-4 rounded border border-purple-100">
-                                <Select label="Select Open Trade" value={selectedRef} onChange={e => handleRefSelection(e.target.value)}>
-                                    <option value="">-- Select Ref No --</option>
-                                    {uniqueOpenRefs.map(r => <option key={r} value={r}>{r}</option>)}
-                                </Select>
-                                {uniqueOpenRefs.length === 0 && <p className="text-xs text-slate-400 mt-1">No open trades found.</p>}
-                            </div>
-                        )}
-                        
-                        <div className="grid grid-cols-4 gap-4 mb-4">
-                            <Input label="Date" type="date" value={date} onChange={e => setDate(e.target.value)} />
-                            <Input label="Ref No" value={refNo} readOnly={true} className="bg-slate-100 font-mono" />
-                            <Select label="Broker" value={brokerId} onChange={e => setBrokerId(e.target.value)} disabled={mode === 'EXISTING'} action={mode === 'NEW' ? onOpenLedgerCreate : null}><option value="">-- Select --</option>{data.ledgers.filter(l => l.type === 'Broker').map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</Select>
-                            <Select label="Status" value={status} onChange={e => setStatus(e.target.value)}><option value="Hold">Open (Hold)</option><option value="Complete">Complete (Close Trade)</option></Select>
-                        </div>
-
-                        {/* Strategy Panel */}
-                        <div className="grid grid-cols-2 gap-6 bg-slate-50 p-4 rounded border border-slate-200 mb-6">
-                            <div>
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Strategy</label>
-                                <div className="flex gap-2">
-                                    <div className="flex-1">
-                                        {!isAddingStrategy ? (
-                                            <select className="w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-700 bg-white" value={strategyId} onChange={e => setStrategyId(e.target.value)}>
-                                                <option value="">-- No Strategy --</option>
-                                                {data.strategies.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                            </select>
-                                        ) : (
-                                            <input type="text" className="w-full border border-blue-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="New Strategy Name" value={newStrategyName} onChange={e => setNewStrategyName(e.target.value)} autoFocus />
-                                        )}
-                                    </div>
-                                    {!isAddingStrategy ? (
-                                        <button onClick={() => setIsAddingStrategy(true)} className="px-3 bg-white border border-slate-300 rounded hover:bg-slate-50 text-slate-600" title="Add New Strategy"><Icon name="plus" size={16} /></button>
-                                    ) : (
-                                        <div className="flex gap-1">
-                                            <button onClick={handleAddStrategy} className="px-3 bg-blue-600 text-white rounded hover:bg-blue-700">Add</button>
-                                            <button onClick={() => setIsAddingStrategy(false)} className="px-3 bg-white border border-slate-300 rounded hover:bg-slate-50 text-slate-600"><Icon name="x" size={16} /></button>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="flex items-center">
-                                <label className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-slate-100 w-full">
-                                    <input type="checkbox" className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500" checked={rulesFollowed} onChange={e => setRulesFollowed(e.target.checked)} />
-                                    <div>
-                                        <div className="font-bold text-slate-700">Rules Followed</div>
-                                        <div className="text-xs text-slate-500">I followed my trading plan perfectly</div>
-                                    </div>
-                                </label>
-                            </div>
-                        </div>
-
-                        <div className="bg-slate-50 rounded-lg p-4 mb-4">
-                            <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-500 uppercase mb-2"><div className="col-span-2">Type</div><div className="col-span-4">Script</div><div className="col-span-2">Qty</div><div className="col-span-2">Rate</div><div className="col-span-1">Total</div></div>
-                            <div className="space-y-2">{lines.map((line, idx) => (<div key={line.id} className="grid grid-cols-12 gap-2 items-center"><div className="col-span-2"><select className={`w-full p-2 rounded border font-bold ${line.type === 'Buy' ? 'text-blue-600 bg-blue-50' : 'text-red-600 bg-red-50'}`} value={line.type} onChange={e => updateLine(idx, 'type', e.target.value)}><option value="Buy">BUY</option><option value="Sell">SELL</option></select></div><div className="col-span-4 flex gap-1"><select className="w-full p-2 rounded border" value={line.scriptId} onChange={e => updateLine(idx, 'scriptId', e.target.value)}><option value="">Select Item</option>{data.stockItems.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select><button onClick={onOpenStockCreate} className="px-2 text-blue-600 bg-blue-50 rounded border border-blue-200"><Icon name="plus" size={14}/></button></div><div className="col-span-2"><input type="number" className="w-full p-2 rounded border" placeholder="Qty" value={line.qty} onChange={e => updateLine(idx, 'qty', e.target.value)} /></div><div className="col-span-2"><input type="number" className="w-full p-2 rounded border" placeholder="Rate" value={line.rate} onChange={e => updateLine(idx, 'rate', e.target.value)} /></div><div className="col-span-1 text-xs font-mono text-right">{(safeFloat(line.qty) * safeFloat(line.rate)).toFixed(0)}</div><div className="col-span-1 text-center">{lines.length > 1 && <button onClick={() => removeLine(idx)} className="text-red-400"><Icon name="x" size={16}/></button>}</div></div>))}</div>
-                            <button onClick={addLine} className="mt-4 text-xs flex items-center gap-1 text-blue-600 font-bold hover:underline"><Icon name="plus" size={14} /> Add Line</button>
-                        </div>
-                        <div className="flex justify-between items-center pt-4 border-t"><div className="text-lg">Turnover: <span className="font-mono font-bold">{formatMoney(totalVal)}</span></div><Button onClick={handleSubmit}>{forceSave ? "Confirm Save" : "Save Transaction"}</Button></div>
-                    </Card>
-                </div>
-            );
+        const BalanceSheet = ({ metrics, dateRange, setDateRange, onBack, onDrillDown }) => ( <div className="space-y-6 max-w-4xl mx-auto"><div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800 text-center flex-1">Balance Sheet</h2></div><div className="flex justify-center"><DateRangePicker dateRange={dateRange} setDateRange={setDateRange} /></div><div className="grid grid-cols-2 gap-0 border border-slate-300 bg-white shadow-sm"><div className="border-r border-slate-300"><div className="bg-slate-100 p-3 font-bold text-center border-b">Liabilities & Equity</div><div className="p-4 space-y-2"><div className="flex justify-between"><span>Capital Account</span><span className="font-mono">{formatMoney(metrics.capital)}</span></div><div className="flex justify-between text-emerald-600"><span>P&L (Surplus)</span><span className="font-mono">{formatMoney(metrics.realizedPL)}</span></div><div className="border-t pt-2 flex justify-between font-bold text-lg mt-10"><span>Total</span><span className="font-mono">{formatMoney(metrics.capital + metrics.realizedPL)}</span></div></div></div><div><div className="bg-slate-100 p-3 font-bold text-center border-b">Assets</div><div className="p-4 space-y-2"><div className="flex justify-between"><span>Broker Cash Balances</span><span className="font-mono">{formatMoney(metrics.totalBrokerBalance)}</span></div><div className="pl-2 space-y-1">{Object.values(metrics.brokerMetrics).map(m => (<div key={m.id} className="flex justify-between text-xs text-slate-500 cursor-pointer hover:text-blue-600" onClick={() => onDrillDown(m.id)}><span>↳ {m.name}</span><span>{formatMoney(m.balance)}</span></div>))}</div><div className="flex justify-between mt-2"><span>Stock Holdings Value</span><span className="font-mono">{formatMoney(metrics.investedValue)}</span></div><div className="border-t pt-2 flex justify-between font-bold text-lg mt-4"><span>Total</span><span className="font-mono">{formatMoney(metrics.totalBrokerBalance + metrics.investedValue)}</span></div></div></div></div></div> );
+        const MonthlyRegister = ({ data, setView, setDateRange, onBack }) => { const months = useMemo(() => { const map = {}; data.vouchers.forEach(v => { const d = new Date(v.date); const key = `${d.getFullYear()}-${d.getMonth()}`; if(!map[key]) map[key] = { date: d, count: 0, dr: 0, cr: 0 }; map[key].count++; }); return Object.values(map).sort((a,b) => a.date - b.date); }, [data.vouchers]); const handleMonthClick = (mDate) => { const y = mDate.getFullYear(), m = mDate.getMonth(); const start = new Date(y, m, 1).toISOString().split('T')[0]; const end = new Date(y, m + 1, 0).toISOString().split('T')[0]; setDateRange({ start, end }); setView('REPORT_DAYBOOK'); }; return ( <div className="space-y-6"><div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800">Monthly Register</h2></div><Card className="overflow-hidden"><table className="w-full text-sm text-left"><thead className="bg-slate-100 text-slate-600"><tr><th className="p-3">Month</th><th className="p-3 text-right">Transactions</th><th className="p-3 text-center">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{months.map((m, i) => ( <tr key={i} onClick={() => handleMonthClick(m.date)} className="hover:bg-blue-50 cursor-pointer group"><td className="p-3 font-medium text-slate-700">{getMonthName(m.date)}</td><td className="p-3 text-right font-mono">{m.count}</td><td className="p-3 text-center text-blue-500 opacity-0 group-hover:opacity-100">Open <Icon name="arrow-right" size={12}/></td></tr> ))}</tbody></table></Card></div> ); };
+        const DayBook = ({ data, onDelete, onEdit, onBack }) => { const todayStr = new Date().toISOString().split('T')[0]; const [dateRange, setDateRange] = useState({ start: todayStr, end: todayStr }); const [typeFilter, setTypeFilter] = useState('ALL'); const filtered = data.vouchers.filter(v => { const dateMatch = v.date >= dateRange.start && v.date <= dateRange.end; const typeMatch = typeFilter === 'ALL' || v.type.toUpperCase() === typeFilter; return dateMatch && typeMatch; }).sort((a,b) => new Date(b.date) - new Date(a.date)); return ( <div className="space-y-6"><div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800">Day Book</h2></div><div className="flex flex-col sm:flex-row justify-between items-center gap-4"><div className="flex gap-2"><button onClick={() => setTypeFilter('ALL')} className={`px-3 py-1 rounded text-xs font-bold ${typeFilter === 'ALL' ? 'bg-blue-600 text-white' : 'bg-slate-100'}`}>All</button><button onClick={() => setTypeFilter('TRADE')} className={`px-3 py-1 rounded text-xs font-bold ${typeFilter === 'TRADE' ? 'bg-blue-600 text-white' : 'bg-slate-100'}`}>Trade</button><button onClick={() => setTypeFilter('FUND')} className={`px-3 py-1 rounded text-xs font-bold ${typeFilter === 'FUND' ? 'bg-blue-600 text-white' : 'bg-slate-100'}`}>Fund</button></div><DateRangePicker dateRange={dateRange} setDateRange={setDateRange} /></div><Card className="overflow-hidden"><table className="w-full text-sm text-left"><thead className="bg-slate-100 text-slate-600"><tr><th className="p-3">Date</th><th className="p-3">Ref</th><th className="p-3">Type</th><th className="p-3">Broker/Ledger</th><th className="p-3">Details</th><th className="p-3">Amount</th><th className="p-3 text-center">Actions</th></tr></thead><tbody className="divide-y divide-slate-100 cursor-pointer">{filtered.map(v => { let brokerName = data.ledgers.find(l => l.id === (v.brokerId || v.ledgerId))?.name || '-'; let details = ''; let val = 0; if (v.type === VOUCHER_TYPES.TRADE) { details = `${v.status} Trade`; val = v.lines ? v.lines.reduce((acc, l) => acc + (safeFloat(l.qty) * safeFloat(l.rate)), 0) : 0; } else if (v.type === VOUCHER_TYPES.FUND) { details = `${v.subType}`; val = v.amount; } else if (v.type === VOUCHER_TYPES.EXPENSE) { details = `Expense` + (v.charges?.length ? ` (${v.charges.length})` : ''); val = v.amount; } return <tr key={v.id} onClick={() => onEdit(v)} className="hover:bg-blue-50 group transition-colors"><td className="p-3">{formatDate(v.date)}</td><td className="p-3 font-mono text-xs">{v.refNo}</td><td className="p-3"><span className={`px-2 py-1 rounded text-xxs font-bold uppercase ${v.type === 'Trade' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{v.type}</span></td><td className="p-3 font-medium text-slate-700">{brokerName}</td><td className="p-3 text-slate-500">{details}</td><td className="p-3 text-right font-mono">{formatMoney(val)}</td><td className="p-3 text-center flex justify-center gap-2"><button onClick={(e) => { e.stopPropagation(); onEdit(v); }} className="text-blue-400 hover:text-blue-600 p-1"><Icon name="pencil" size={14}/></button><button onClick={(e) => { e.stopPropagation(); onDelete(v.id); }} className="text-red-300 hover:text-red-600 p-1"><Icon name="trash-2" size={14}/></button></td></tr> })}</tbody></table></Card></div> ); };
+        const ToolsView = ({ data, updateData, restoreVoucher, permanentDelete, requestConfirm, notify, onBack }) => { const fileInputRef = useRef(null); const handleExport = () => { const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `tradebook_backup_${new Date().toISOString().split('T')[0]}.json`; a.click(); }; const handleImport = (e) => { const file = e.target.files[0]; if (!file) return; requestConfirm("Overwrite Data?", "This will replace all current data with the backup file. This cannot be undone.", () => { const reader = new FileReader(); reader.onload = (ev) => { try { const parsed = JSON.parse(ev.target.result); if (parsed.vouchers && parsed.ledgers) { updateData(() => parsed); notify("Data Restored Successfully!", "success"); } else { notify("Invalid Backup File", "error"); } } catch (err) { notify("Error reading file", "error"); } }; reader.readAsText(file); }); }; const handleResetFY = () => { requestConfirm("Close Financial Year?", "This will archive all vouchers. Ensure you have exported a backup first.", () => { handleExport(); notify("FY Reset requires manual balance carry forward (Not Implemented). Data exported.", "warning"); }); }; return ( <div className="space-y-8"><div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800">Tools & Settings</h2></div><div className="grid grid-cols-2 gap-6"><Card className="p-6 space-y-4"><h3 className="font-bold border-b pb-2 flex items-center gap-2"><Icon name="save" className="text-blue-500"/> Data Management</h3><div className="flex flex-col gap-3"><Button onClick={handleExport} variant="secondary">Export Backup (JSON)</Button><div className="relative"><input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept=".json" /><Button onClick={() => fileInputRef.current.click()} variant="secondary" className="w-full">Import / Restore Data</Button></div><div className="pt-4 border-t"><Button onClick={handleResetFY} variant="danger" className="w-full justify-center">Start New Financial Year</Button><p className="text-xs text-red-400 mt-2 text-center">Caution: Archives current data.</p></div></div></Card><Card className="p-6 space-y-4"><h3 className="font-bold border-b pb-2 flex items-center gap-2"><Icon name="trash-2" className="text-red-500"/> Recycle Bin ({data.recycleBin.length})</h3><div className="h-64 overflow-y-auto space-y-2">{data.recycleBin.length === 0 && <p className="text-slate-400 text-sm text-center py-4">Bin is empty</p>}{data.recycleBin.map(v => (<div key={v.id} className="text-sm border p-2 rounded flex justify-between items-center bg-red-50"><div><div className="font-bold">{v.refNo}</div><div className="text-xs text-slate-500">{formatDate(v.date)} | {v.type}</div></div><div className="flex gap-2"><button onClick={() => restoreVoucher(v.id)} className="text-blue-600 hover:underline text-xs">Restore</button><button onClick={() => permanentDelete(v.id)} className="text-red-600 hover:underline text-xs">Delete</button></div></div>))}</div></Card></div></div> ); };
+        const Dashboard = ({ data, metrics, dateRange, setDateRange }) => { return ( <div className="space-y-6"><div className="flex flex-col sm:flex-row justify-between items-center gap-4"><h2 className="text-2xl font-bold text-slate-800">Financial Dashboard</h2><DateRangePicker dateRange={dateRange} setDateRange={setDateRange} /></div><div className="grid grid-cols-4 gap-4"><StatCard title="Net Worth" value={metrics.netWorth} icon="landmark" color="slate" /><StatCard title="Cash Balance" value={metrics.totalBrokerBalance} icon="wallet" color="blue" /><StatCard title={`P&L (Selected Period)`} value={metrics.realizedPL} icon="trending-up" color={metrics.realizedPL >= 0 ? "emerald" : "red"} /><StatCard title="Holdings Value" value={metrics.investedValue} icon="briefcase" color="purple" /></div><div className="grid grid-cols-2 gap-6"><Card className="p-6"><h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><Icon name="wallet" /> Broker Performance (In Period)</h3><div className="space-y-3">{Object.values(metrics.brokerMetrics).map((m, i) => (<div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded border border-slate-100"><div className="flex flex-col"><span className="text-slate-800 font-medium">{m.name}</span><span className="text-xs text-slate-500">Current Bal: {formatMoney(m.balance)}</span></div><div className="text-right"><span className={`block font-bold ${m.realizedPL >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatMoney(m.realizedPL)}</span><span className="text-xs text-slate-400">P&L</span></div></div>))}</div></Card><Card className="p-6"><h3 className="font-bold text-slate-700 mb-4">Recent Activity</h3><div className="space-y-2">{data.vouchers.slice(-5).reverse().map(v => (<div key={v.id} className="flex justify-between text-sm border-b border-slate-100 pb-2"><div><span className="font-medium text-slate-800">{v.type}</span><span className="text-slate-400 mx-2">|</span><span className="text-slate-500">{formatDate(v.date)}</span></div><div className="font-mono text-xs bg-slate-100 px-2 py-1 rounded">{v.refNo}</div></div>))}</div></Card></div></div> ); };
+        const TradeVoucher = ({ data, metrics, onSave, editingVoucher, onOpenLedgerCreate, onOpenStockCreate, notify, onBack, onAddStrategy, requestConfirm }) => { const [mode, setMode] = useState('NEW'); const [date, setDate] = useState(new Date().toISOString().split('T')[0]); const [brokerId, setBrokerId] = useState(''); const [status, setStatus] = useState('Hold'); const [lines, setLines] = useState([{ id: generateID(), type: 'Buy', scriptId: '', qty: 0, rate: 0 }]); const [refNo, setRefNo] = useState(''); const [selectedRef, setSelectedRef] = useState(''); const [strategyId, setStrategyId] = useState(''); const [rulesFollowed, setRulesFollowed] = useState(false); const [newStrategyName, setNewStrategyName] = useState(''); const [isAddingStrategy, setIsAddingStrategy] = useState(false); const [forceSave, setForceSave] = useState(false); useEffect(() => { if (editingVoucher) { setMode('EDIT'); setDate(editingVoucher.date); setBrokerId(editingVoucher.brokerId); setStatus(editingVoucher.status); setLines(editingVoucher.lines); setRefNo(editingVoucher.refNo); if(editingVoucher.strategyId) setStrategyId(editingVoucher.strategyId); setRulesFollowed(editingVoucher.rulesFollowed || false); } else { setMode('NEW'); setLines([{ id: generateID(), type: 'Buy', scriptId: '', qty: 0, rate: 0 }]); setBrokerId(''); setStatus('Hold'); setStrategyId(''); setRulesFollowed(false); } setForceSave(false); }, [editingVoucher]); useEffect(() => { if(mode === 'NEW' && !editingVoucher) setRefNo(generateRefNo('Trade', date, data.vouchers)); }, [date, mode, data.vouchers, editingVoucher]); const completedRefs = new Set(data.vouchers.filter(v => v.status === 'Complete').map(v => v.refNo)); const uniqueOpenRefs = [...new Set(data.vouchers.filter(v => v.type === VOUCHER_TYPES.TRADE && v.refNo && !completedRefs.has(v.refNo)).map(v => v.refNo))]; const handleRefSelection = (ref) => { setSelectedRef(ref); if (ref) { const prevVoucher = data.vouchers.find(v => v.refNo === ref); if (prevVoucher) { setBrokerId(prevVoucher.brokerId); setRefNo(ref); setLines([{ id: generateID(), type: 'Buy', scriptId: '', qty: 0, rate: 0 }]); if(prevVoucher.strategyId) setStrategyId(prevVoucher.strategyId); setRulesFollowed(prevVoucher.rulesFollowed || false); } } }; const updateLine = (idx, field, val) => { const newLines = [...lines]; newLines[idx][field] = val; setLines(newLines); }; const addLine = () => setLines([...lines, { id: generateID(), type: 'Buy', scriptId: '', qty: 0, rate: 0 }]); const removeLine = (idx) => setLines(lines.filter((_, i) => i !== idx)); const totalVal = lines.reduce((acc, l) => acc + (safeFloat(l.qty) * safeFloat(l.rate)), 0); const handleAddStrategy = () => { if(newStrategyName) { onAddStrategy(newStrategyName); setNewStrategyName(''); setIsAddingStrategy(false); } }; const validateTrade = () => { if (!brokerId) return { valid: false, msg: "Select Broker" }; if (lines.some(l => !l.scriptId || l.qty <= 0)) return { valid: false, msg: "Invalid Lines: Check Script & Qty" }; let warningMsg = ""; const brokerMetric = metrics?.brokerMetrics?.[brokerId]; if (brokerMetric && brokerMetric.balance < 0) warningMsg = `Warning: ${brokerMetric.name} has negative balance.`; return { valid: true, warning: warningMsg }; }; const proceedSave = () => { onSave({ id: mode === 'EDIT' ? editingVoucher.id : generateID(), type: VOUCHER_TYPES.TRADE, date, refNo, brokerId, status, strategyId, rulesFollowed, lines: lines.map(l => ({...l, qty: safeFloat(l.qty), rate: safeFloat(l.rate)})) }); if (mode === 'NEW') setLines([{ id: generateID(), type: 'Buy', scriptId: '', qty: 0, rate: 0 }]); else if (mode === 'EXISTING') { setLines([{ id: generateID(), type: 'Buy', scriptId: '', qty: 0, rate: 0 }]); notify("Transaction Saved! Add next leg.", "success"); } setForceSave(false); }; const handleSubmit = () => { const { valid, msg, warning } = validateTrade(); if (!valid) return notify(msg, "error"); if (warning && !forceSave) { notify(warning + " Click save again to confirm.", "warning"); setForceSave(true); return; } if (status === 'Complete') { requestConfirm("Closing Trade?", `This will mark Reference #${refNo} as COMPLETE. P&L will be realized and this trade will be removed from active lists.`, proceedSave, "warning"); return; } if (mode === 'EDIT' && editingVoucher.status === 'Complete' && status === 'Hold') { requestConfirm("Re-opening Trade?", `You are changing status from Complete to Hold. P&L will move back to floating/unrealized.`, proceedSave, "warning"); return; } proceedSave(); }; return ( <div className="max-w-4xl mx-auto space-y-6"><div className="flex justify-between items-center"><div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800">{mode === 'EDIT' ? "Edit Transaction" : "Trade Entry"}</h2></div>{!editingVoucher && (<div className="flex bg-slate-200 p-1 rounded-lg"><button onClick={() => setMode('NEW')} className={`px-4 py-1 rounded-md text-sm font-bold transition-all ${mode === 'NEW' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>New Trade</button><button onClick={() => setMode('EXISTING')} className={`px-4 py-1 rounded-md text-sm font-bold transition-all ${mode === 'EXISTING' ? 'bg-white shadow text-purple-600' : 'text-slate-500'}`}>Existing Trade</button></div>)}</div><Card className={`p-6 border-t-4 ${mode === 'EXISTING' ? 'border-purple-500' : 'border-blue-500'}`}>{mode === 'EXISTING' && (<div className="mb-6 bg-purple-50 p-4 rounded border border-purple-100"><Select label="Select Open Trade" value={selectedRef} onChange={e => handleRefSelection(e.target.value)}><option value="">-- Select Ref No --</option>{uniqueOpenRefs.map(r => <option key={r} value={r}>{r}</option>)}</Select>{uniqueOpenRefs.length === 0 && <p className="text-xs text-slate-400 mt-1">No open trades found.</p>}</div>)}<div className="grid grid-cols-4 gap-4 mb-4"><Input label="Date" type="date" value={date} onChange={e => setDate(e.target.value)} /><Input label="Ref No" value={refNo} readOnly={true} className="bg-slate-100 font-mono" /><Select label="Broker" value={brokerId} onChange={e => setBrokerId(e.target.value)} disabled={mode === 'EXISTING'} action={mode === 'NEW' ? onOpenLedgerCreate : null}><option value="">-- Select --</option>{data.ledgers.filter(l => l.type === 'Broker').map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</Select><Select label="Status" value={status} onChange={e => setStatus(e.target.value)}><option value="Hold">Open (Hold)</option><option value="Complete">Complete (Close Trade)</option></Select></div><div className="grid grid-cols-2 gap-6 bg-slate-50 p-4 rounded border border-slate-200 mb-6"><div><label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Strategy</label><div className="flex gap-2"><div className="flex-1">{!isAddingStrategy ? (<select className="w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-700 bg-white" value={strategyId} onChange={e => setStrategyId(e.target.value)}><option value="">-- No Strategy --</option>{data.strategies.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>) : (<input type="text" className="w-full border border-blue-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="New Strategy Name" value={newStrategyName} onChange={e => setNewStrategyName(e.target.value)} autoFocus />)}</div>{!isAddingStrategy ? (<button onClick={() => setIsAddingStrategy(true)} className="px-3 bg-white border border-slate-300 rounded hover:bg-slate-50 text-slate-600" title="Add New Strategy"><Icon name="plus" size={16} /></button>) : (<div className="flex gap-1"><button onClick={handleAddStrategy} className="px-3 bg-blue-600 text-white rounded hover:bg-blue-700">Add</button><button onClick={() => setIsAddingStrategy(false)} className="px-3 bg-white border border-slate-300 rounded hover:bg-slate-50 text-slate-600"><Icon name="x" size={16} /></button></div>)}</div></div><div className="flex items-center"><label className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-slate-100 w-full"><input type="checkbox" className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500" checked={rulesFollowed} onChange={e => setRulesFollowed(e.target.checked)} /><div><div className="font-bold text-slate-700">Rules Followed</div><div className="text-xs text-slate-500">I followed my trading plan perfectly</div></div></label></div></div><div className="bg-slate-50 rounded-lg p-4 mb-4"><div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-500 uppercase mb-2"><div className="col-span-2">Type</div><div className="col-span-4">Script</div><div className="col-span-2">Qty</div><div className="col-span-2">Rate</div><div className="col-span-1">Total</div></div><div className="space-y-2">{lines.map((line, idx) => (<div key={line.id} className="grid grid-cols-12 gap-2 items-center"><div className="col-span-2"><select className={`w-full p-2 rounded border font-bold ${line.type === 'Buy' ? 'text-blue-600 bg-blue-50' : 'text-red-600 bg-red-50'}`} value={line.type} onChange={e => updateLine(idx, 'type', e.target.value)}><option value="Buy">BUY</option><option value="Sell">SELL</option></select></div><div className="col-span-4 flex gap-1"><select className="w-full p-2 rounded border" value={line.scriptId} onChange={e => updateLine(idx, 'scriptId', e.target.value)}><option value="">Select Item</option>{data.stockItems.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select><button onClick={onOpenStockCreate} className="px-2 text-blue-600 bg-blue-50 rounded border border-blue-200"><Icon name="plus" size={14}/></button></div><div className="col-span-2"><input type="number" className="w-full p-2 rounded border" placeholder="Qty" value={line.qty} onChange={e => updateLine(idx, 'qty', e.target.value)} /></div><div className="col-span-2"><input type="number" className="w-full p-2 rounded border" placeholder="Rate" value={line.rate} onChange={e => updateLine(idx, 'rate', e.target.value)} /></div><div className="col-span-1 text-xs font-mono text-right">{(safeFloat(line.qty) * safeFloat(line.rate)).toFixed(0)}</div><div className="col-span-1 text-center">{lines.length > 1 && <button onClick={() => removeLine(idx)} className="text-red-400"><Icon name="x" size={16}/></button>}</div></div>))}</div><button onClick={addLine} className="mt-4 text-xs flex items-center gap-1 text-blue-600 font-bold hover:underline"><Icon name="plus" size={14} /> Add Line</button></div><div className="flex justify-between items-center pt-4 border-t"><div className="text-lg">Turnover: <span className="font-mono font-bold">{formatMoney(totalVal)}</span></div><Button onClick={handleSubmit}>{forceSave ? "Confirm Save" : "Save Transaction"}</Button></div></Card></div> );
         };
 
         const ExpenseVoucher = ({ data, onSave, editingVoucher, onOpenLedgerCreate, notify, onBack }) => {
@@ -1011,90 +464,29 @@
                     setRefNo(generateRefNo('Expense', date, data.vouchers)); 
                     setCharges([]);
                 }
-            }, [editingVoucher]); // Removed date dependency
+            }, [editingVoucher]); 
 
-             // RefNo Effect
-             useEffect(() => {
+            useEffect(() => {
                 if (!editingVoucher) {
                     setRefNo(generateRefNo('Expense', date, data.vouchers));
                 }
             }, [date, editingVoucher, data.vouchers]);
 
-            // Auto-load Template on Broker Select
             useEffect(() => {
                 if (ledgerId && !editingVoucher) {
                     const template = data.settings.expenseTemplates[ledgerId];
-                    if (template) {
-                        setCharges(template.map(c => ({ ...c, id: generateID() }))); // Clone
-                    } else {
-                        // Fallback logic
-                        const ledger = data.ledgers.find(l => l.id === ledgerId);
-                        if (ledger && ledger.name.toLowerCase().includes('zerodha')) {
-                            setCharges(ZERODHA_DEFAULTS.map(c => ({...c, id: generateID()})));
-                        } else {
-                            setCharges([{ id: generateID(), name: 'Charges', amount: 0 }]);
-                        }
-                    }
+                    if (template) { setCharges(template.map(c => ({ ...c, id: generateID() }))); } else { const ledger = data.ledgers.find(l => l.id === ledgerId); if (ledger && ledger.name.toLowerCase().includes('zerodha')) { setCharges(ZERODHA_DEFAULTS.map(c => ({...c, id: generateID()}))); } else { setCharges([{ id: generateID(), name: 'Charges', amount: 0 }]); } }
                 }
             }, [ledgerId, data.ledgers, data.settings.expenseTemplates]);
 
-            // Auto-sum
-            useEffect(() => {
-                const total = charges.reduce((sum, c) => sum + safeFloat(c.amount), 0);
-                setAmount(total);
-            }, [charges]);
+            useEffect(() => { const total = charges.reduce((sum, c) => sum + safeFloat(c.amount), 0); setAmount(total); }, [charges]);
 
-            const updateCharge = (idx, field, val) => {
-                const newCharges = [...charges];
-                newCharges[idx][field] = val;
-                setCharges(newCharges);
-            };
+            const updateCharge = (idx, field, val) => { const newCharges = [...charges]; newCharges[idx][field] = val; setCharges(newCharges); };
             const addCharge = () => setCharges([...charges, { id: generateID(), name: '', amount: 0 }]);
             const removeCharge = (idx) => setCharges(charges.filter((_, i) => i !== idx));
+            const handleSubmit = () => { if (!ledgerId) return notify("Select Broker", "error"); onSave({ id: editingVoucher?.id || generateID(), type: VOUCHER_TYPES.EXPENSE, date, refNo, ledgerId, amount: safeFloat(amount), narration, charges, strategyId }); if(!editingVoucher) { setAmount(''); setNarration(''); setCharges([]); setStrategyId(''); } };
 
-            const handleSubmit = () => {
-                if (!ledgerId) return notify("Select Broker", "error");
-                onSave({
-                    id: editingVoucher?.id || generateID(),
-                    type: VOUCHER_TYPES.EXPENSE,
-                    date, refNo, ledgerId, amount: safeFloat(amount), narration, charges, strategyId
-                });
-                if(!editingVoucher) { setAmount(''); setNarration(''); setCharges([]); setStrategyId(''); }
-            };
-
-            return (
-                <div className="max-w-2xl mx-auto space-y-6">
-                    <div className="flex items-center gap-4">
-                        <button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button>
-                        <h2 className="text-2xl font-bold text-slate-800 flex-1 flex justify-between">{editingVoucher ? "Edit Expense" : "Expense Voucher"} <span className="text-sm font-mono bg-slate-100 px-2 py-1 rounded">{refNo}</span></h2>
-                    </div>
-                    <Card className="p-8 space-y-6 border-t-4 border-orange-500">
-                        <div className="grid grid-cols-2 gap-4">
-                            <Input label="Date" type="date" value={date} onChange={e => setDate(e.target.value)} />
-                            <Select label="Broker" value={ledgerId} onChange={e => setLedgerId(e.target.value)} action={onOpenLedgerCreate}><option value="">-- Select Broker --</option>{data.ledgers.filter(l => l.type === 'Broker').map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</Select>
-                        </div>
-                        <Select label="Strategy (Optional)" value={strategyId} onChange={e => setStrategyId(e.target.value)}><option value="">-- None --</option>{data.strategies.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</Select>
-                        
-                        <div className="bg-slate-50 p-4 rounded border border-slate-200">
-                            <h4 className="font-bold text-sm text-slate-500 mb-3 uppercase tracking-wider flex justify-between">Charge Details <button onClick={addCharge} className="text-blue-600 text-xs hover:underline">+ Add Row</button></h4>
-                            {charges.map((c, i) => (
-                                <div key={i} className="flex gap-2 mb-2 items-center">
-                                    <input className="flex-1 border p-1 rounded text-sm" value={c.name} onChange={e => updateCharge(i, 'name', e.target.value)} placeholder="Charge Name" />
-                                    <input type="number" className="w-24 border p-1 rounded text-sm text-right" value={c.amount} onChange={e => updateCharge(i, 'amount', e.target.value)} placeholder="0" />
-                                    <button onClick={() => removeCharge(i)} className="text-red-400"><Icon name="x" size={14}/></button>
-                                </div>
-                            ))}
-                            <div className="flex justify-between items-center pt-2 border-t mt-2">
-                                <span className="font-bold">Total Expense</span>
-                                <span className="font-mono text-lg font-bold">{formatMoney(amount)}</span>
-                            </div>
-                        </div>
-                        
-                        <Input label="Narration" value={narration} onChange={e => setNarration(e.target.value)} placeholder="Enter details..." />
-                        <Button className="w-full py-3" onClick={handleSubmit}>{editingVoucher ? "Update Expense" : "Save Expense Voucher"}</Button>
-                    </Card>
-                </div>
-            );
+            return ( <div className="max-w-2xl mx-auto space-y-6"><div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800 flex-1 flex justify-between">{editingVoucher ? "Edit Expense" : "Expense Voucher"} <span className="text-sm font-mono bg-slate-100 px-2 py-1 rounded">{refNo}</span></h2></div><Card className="p-8 space-y-6 border-t-4 border-orange-500"><div className="grid grid-cols-2 gap-4"><Input label="Date" type="date" value={date} onChange={e => setDate(e.target.value)} /><Select label="Broker" value={ledgerId} onChange={e => setLedgerId(e.target.value)} action={onOpenLedgerCreate}><option value="">-- Select Broker --</option>{data.ledgers.filter(l => l.type === 'Broker').map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</Select></div><Select label="Strategy (Optional)" value={strategyId} onChange={e => setStrategyId(e.target.value)}><option value="">-- None --</option>{data.strategies.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</Select><div className="bg-slate-50 p-4 rounded border border-slate-200"><h4 className="font-bold text-sm text-slate-500 mb-3 uppercase tracking-wider flex justify-between">Charge Details <button onClick={addCharge} className="text-blue-600 text-xs hover:underline">+ Add Row</button></h4>{charges.map((c, i) => (<div key={i} className="flex gap-2 mb-2 items-center"><input className="flex-1 border p-1 rounded text-sm" value={c.name} onChange={e => updateCharge(i, 'name', e.target.value)} placeholder="Charge Name" /><input type="number" className="w-24 border p-1 rounded text-sm text-right" value={c.amount} onChange={e => updateCharge(i, 'amount', e.target.value)} placeholder="0" /><button onClick={() => removeCharge(i)} className="text-red-400"><Icon name="x" size={14}/></button></div>))}<div className="flex justify-between items-center pt-2 border-t mt-2"><span className="font-bold">Total Expense</span><span className="font-mono text-lg font-bold">{formatMoney(amount)}</span></div></div><Input label="Narration" value={narration} onChange={e => setNarration(e.target.value)} placeholder="Enter details..." /><Button className="w-full py-3" onClick={handleSubmit}>{editingVoucher ? "Update Expense" : "Save Expense Voucher"}</Button></Card></div> );
         };
 
         const FundVoucher = ({ data, onSave, editingVoucher, onOpenLedgerCreate, notify, onBack }) => {
@@ -1110,42 +502,20 @@
                     setDate(editingVoucher.date); setSubType(editingVoucher.subType); setLedgerId(editingVoucher.ledgerId);
                     setAmount(editingVoucher.amount); setNarration(editingVoucher.narration || ''); setRefNo(editingVoucher.refNo);
                 } else { setRefNo(generateRefNo('Fund', date, data.vouchers)); }
-            }, [editingVoucher]); // Removed date dependency
+            }, [editingVoucher]); 
 
-            // RefNo Effect
             useEffect(() => {
                 if (!editingVoucher) {
                     setRefNo(generateRefNo('Fund', date, data.vouchers));
                 }
             }, [date, editingVoucher, data.vouchers]);
 
-
             const handleSubmit = () => { 
                 if (!amount || !ledgerId) return notify("Fill all fields", "error"); 
                 onSave({ id: editingVoucher?.id || generateID(), type: VOUCHER_TYPES.FUND, date, refNo, subType, ledgerId, amount: safeFloat(amount), narration }); 
                 if(!editingVoucher) { setAmount(''); setNarration(''); } 
             };
-            return (
-                <div className="max-w-2xl mx-auto space-y-6">
-                    <div className="flex items-center gap-4">
-                        <button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button>
-                        <h2 className="text-2xl font-bold text-slate-800 flex-1 flex justify-between">{editingVoucher ? "Edit Fund" : "Fund Voucher"} <span className="text-sm font-mono bg-slate-100 px-2 py-1 rounded">{refNo}</span></h2>
-                    </div>
-                    <Card className="p-8 space-y-6 border-t-4 border-blue-500">
-                        <div className="grid grid-cols-2 gap-4"><Input label="Date" type="date" value={date} onChange={e => setDate(e.target.value)} /><Select label="Type" value={subType} onChange={e => setSubType(e.target.value)}><option value="Deposit">Deposit (Add Funds)</option><option value="Withdraw">Withdraw (Payout)</option></Select></div>
-                        <Select label="Account" value={ledgerId} onChange={e => setLedgerId(e.target.value)} action={onOpenLedgerCreate}><option value="">-- Select Ledger --</option>{data.ledgers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</Select>
-                        <Input label="Amount" type="number" value={amount} onChange={e => setAmount(e.target.value)} className="text-xl font-mono" />
-                        
-                        <div className="flex gap-2 items-end">
-                            <div className="flex-1">
-                                <Input label="Narration" value={narration} onChange={e => setNarration(e.target.value)} placeholder="Narration..." />
-                            </div>
-                        </div>
-
-                        <Button className="w-full py-3" onClick={handleSubmit}>{editingVoucher ? "Update Voucher" : "Save Voucher"}</Button>
-                    </Card>
-                </div>
-            );
+            return ( <div className="max-w-2xl mx-auto space-y-6"><div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800 flex-1 flex justify-between">{editingVoucher ? "Edit Fund" : "Fund Voucher"} <span className="text-sm font-mono bg-slate-100 px-2 py-1 rounded">{refNo}</span></h2></div><Card className="p-8 space-y-6 border-t-4 border-blue-500"><div className="grid grid-cols-2 gap-4"><Input label="Date" type="date" value={date} onChange={e => setDate(e.target.value)} /><Select label="Type" value={subType} onChange={e => setSubType(e.target.value)}><option value="Deposit">Deposit (Add Funds)</option><option value="Withdraw">Withdraw (Payout)</option></Select></div><Select label="Account" value={ledgerId} onChange={e => setLedgerId(e.target.value)} action={onOpenLedgerCreate}><option value="">-- Select Ledger --</option>{data.ledgers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</Select><Input label="Amount" type="number" value={amount} onChange={e => setAmount(e.target.value)} className="text-xl font-mono" /><div className="flex gap-2 items-end"><div className="flex-1"><Input label="Narration" value={narration} onChange={e => setNarration(e.target.value)} placeholder="Narration..." /></div></div><Button className="w-full py-3" onClick={handleSubmit}>{editingVoucher ? "Update Voucher" : "Save Voucher"}</Button></Card></div> );
         };
 
         const LedgerView = ({ data, onEdit, onDelete, metrics, onBack, initialLedger }) => {
@@ -1186,7 +556,7 @@
                 <div className="space-y-6">
                     <div className="flex items-center gap-4"><button onClick={onBack} className="p-2 rounded hover:bg-slate-200"><Icon name="arrow-left" /></button><h2 className="text-2xl font-bold text-slate-800">Ledger View</h2></div>
                     <div className="flex flex-col sm:flex-row justify-between items-center gap-4"><div className="w-64"><Select value={selectedLedger} onChange={e => setSelectedLedger(e.target.value)}><option value="">Select Ledger</option>{data.ledgers.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</Select></div><DateRangePicker dateRange={dateRange} setDateRange={setDateRange} /></div>
-                    {selectedLedger && ( <Card className="overflow-hidden"><div className="bg-slate-50 p-4 border-b flex justify-between items-center"><span className="font-bold text-slate-600 uppercase tracking-wider">Closing Balance (All Time)</span><span className="text-xl font-mono font-bold text-slate-800">{formatMoney(displayBalance)}</span></div><table className="w-full text-sm text-left"><thead className="bg-slate-100"><tr><th className="p-3">Date</th><th className="p-3">Ref</th><th className="p-3">Particulars</th><th className="p-3 text-right">Debit</th><th className="p-3 text-right">Credit</th><th className="p-3 text-center">Action</th></tr></thead><tbody className="divide-y divide-slate-100 cursor-pointer">{transactions.map(v => { let dr = 0, cr = 0, desc = ''; 
+                    {selectedLedger && ( <Card className="overflow-hidden"><div className="bg-slate-50 p-4 border-b flex justify-between items-center"><span className="font-bold text-slate-600 uppercase tracking-wider">Closing Balance (All Time)</span><span className="text-xl font-mono font-bold text-slate-800">{formatMoney(displayBalance)}</span></div><table className="w-full text-sm text-left"><thead className="bg-slate-100 text-slate-600"><tr><th className="p-3">Date</th><th className="p-3">Ref</th><th className="p-3">Particulars</th><th className="p-3 text-right">Debit</th><th className="p-3 text-right">Credit</th><th className="p-3 text-center">Action</th></tr></thead><tbody className="divide-y divide-slate-100 cursor-pointer">{transactions.map(v => { let dr = 0, cr = 0, desc = ''; 
                         if (v.type === VOUCHER_TYPES.FUND) { desc = `${v.subType} (${v.narration || '-'})`; if (v.subType === 'Deposit') cr = v.amount; else dr = v.amount; } 
                         else if (v.type === VOUCHER_TYPES.EXPENSE) { desc = `Expense: ${v.charges?.map(c=>c.name).join(', ') || 'Charges'} (${v.narration || '-'})`; dr = v.amount; }
                         else { desc = `Trade: ${v.status}`; let tradeFlow = 0; v.lines.forEach(l => tradeFlow += (l.type === 'Sell' ? (l.qty * l.rate) : -(l.qty * l.rate))); if (tradeFlow > 0) cr = tradeFlow; else dr = Math.abs(tradeFlow); } 
@@ -1243,7 +613,7 @@
             </div>);
         };
 
-        const Sidebar = ({ view, setView, setEditingVoucher }) => {
+        const Sidebar = ({ view, setView, setEditingVoucher, user, onLogout }) => {
             const handleNav = (v) => { setEditingVoucher(null); setView(v); };
             return (
                 <div className="w-64 bg-slate-900 text-slate-300 flex flex-col h-screen fixed left-0 top-0 z-10">
@@ -1269,10 +639,13 @@
                         <NavBtn active={view === 'TOOLS'} onClick={() => handleNav('TOOLS')} icon="settings" label="Tools & Settings" />
                     </nav>
                      <div className="p-4 border-t border-slate-700 bg-slate-800">
-                        <div className="flex items-center gap-2 text-xs text-slate-400">
-                            <Icon name="database" size={14} className="text-green-500" />
-                            <span>Storage: Local Device</span>
+                        <div className="flex items-center gap-2 text-xs text-slate-400 mb-2">
+                            <Icon name="user" size={14} className="text-blue-500" />
+                            <span>{user?.displayName || user?.email || 'User'}</span>
                         </div>
+                        <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded text-xs">
+                            <Icon name="log-out" size={14} /> Logout
+                        </button>
                     </div>
                 </div>
             );
@@ -1280,17 +653,86 @@
 
         // --- MAIN APP ---
         const App = () => {
-            const [data, setData] = useState(() => {
-                const saved = localStorage.getItem('trading_ledger_data');
-                const parsed = saved ? JSON.parse(saved) : INITIAL_STATE;
-                if (!parsed.strategies) parsed.strategies = INITIAL_STATE.strategies;
-                if (!parsed.settings.expenseTemplates) parsed.settings.expenseTemplates = {};
-                return parsed;
-            });
+            const [user, setUser] = useState(null); 
+            const [data, setData] = useState(null); // Null initially for loading state
+            const [loading, setLoading] = useState(true);
+            const [subscriptionStatus, setSubscriptionStatus] = useState(null); // 'active', 'trial', 'expired', null
+
+            // Auth & Data Sync
+            useEffect(() => {
+                // GUARD: Check if auth is initialized
+                if (!auth) {
+                    console.warn("Firebase not configured. Auth is null.");
+                    setLoading(false);
+                    return;
+                }
+
+                const unsubscribe = auth.onAuthStateChanged(async (u) => {
+                    if (u) {
+                        setUser(u);
+                        // Fetch Data from Firestore
+                        try {
+                            const docRef = db.collection('users').doc(u.uid);
+                            const docSnap = await docRef.get();
+                            if (docSnap.exists) {
+                                const userData = docSnap.data();
+                                setData(userData);
+                                setSubscriptionStatus(userData.subscriptionStatus || 'trial'); // Default to trial if missing
+                            } else {
+                                // New User Setup
+                                const newUserData = { ...INITIAL_STATE, subscriptionStatus: 'trial', trialStartDate: new Date().toISOString() };
+                                setData(newUserData);
+                                await docRef.set(newUserData);
+                                setSubscriptionStatus('trial');
+                            }
+                        } catch (err) {
+                            console.error("Error fetching data:", err);
+                            // Fallback for Dev Mode (if Firestore fails)
+                            if (u.uid === 'dev-user') {
+                                setData(INITIAL_STATE);
+                                setSubscriptionStatus('active');
+                            } else {
+                                alert("Error loading data from server.");
+                            }
+                        }
+                    } else {
+                        setUser(null);
+                        setData(null);
+                    }
+                    setLoading(false);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            // Auto-Save Effect (Debounced)
+            useEffect(() => {
+                if (user && data && !loading) {
+                    if(user.uid === 'dev-user') return; // Skip cloud save for dev user
+                    const timeout = setTimeout(() => {
+                        db.collection('users').doc(user.uid).set(data).catch(e => console.error("Save failed", e));
+                    }, 2000); // 2 sec auto-save delay
+                    return () => clearTimeout(timeout);
+                }
+            }, [data, user, loading]);
+            
+            const handleSubscribe = () => {
+                // Simulate Payment Success
+                updateData(prev => ({ ...prev, subscriptionStatus: 'active' }));
+                setSubscriptionStatus('active');
+                alert("Subscription Activated! Welcome to Pro.");
+            };
+
 
             // ... (Keep existing history & navigation logic)
             const [history, setHistory] = useState([]);
-            const updateData = (newDataFn) => { setHistory(prev => [...prev.slice(-4), data]); setData(newDataFn); };
+            // Update Data wrapper (Optimistic UI update)
+            const updateData = (newDataFn) => { 
+                if (!data) return;
+                const newData = typeof newDataFn === 'function' ? newDataFn(data) : newDataFn;
+                setHistory(prev => [...prev.slice(-4), data]); 
+                setData(newData); 
+            };
+
             const undoLastAction = () => { if (history.length === 0) return; setData(history[history.length - 1]); setHistory(prev => prev.slice(0, -1)); notify("Undo successful!", "success"); };
             const [viewStack, setViewStack] = useState(['DASHBOARD']);
             const view = viewStack[viewStack.length - 1];
@@ -1304,8 +746,6 @@
             const today = new Date();
             const [dateRange, setDateRange] = useState({ start: `${today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1}-04-01`, end: today.toISOString().split('T')[0] });
 
-            // ... (Keep existing useEffects for backup)
-            useEffect(() => { localStorage.setItem('trading_ledger_data', JSON.stringify(data)); lucide.createIcons(); }, [data]);
             const notify = (msg, type = 'success', action = null) => { setNotification({ msg, type, action }); setTimeout(() => setNotification(null), 4000); };
             const requestConfirm = (title, message, onConfirm, type="danger") => { setConfirmDialog({ isOpen: true, title, message, onConfirm: () => { onConfirm(); setConfirmDialog(prev => ({ ...prev, isOpen: false })); }, type }); };
 
@@ -1332,8 +772,13 @@
                 notify("Strategy Created");
             };
 
+            const handleLogout = () => {
+                auth.signOut();
+            };
+
             // Metrics (Consolidated logic for new Voucher Type)
             const metrics = useMemo(() => {
+                if (!data) return { capital: 0, brokerMetrics: {}, totalBrokerBalance: 0, realizedPL: 0, investedValue: 0, netWorth: 0, totalFundAdded: 0, roi: 0 };
                 let capital = 0; let brokerMetrics = {};
                 data.ledgers.forEach(l => { if(l.type === 'Capital Account') capital += safeFloat(l.openingBalance); if(l.type === 'Broker') brokerMetrics[l.id] = { id: l.id, balance: safeFloat(l.openingBalance), realizedPL: 0, totalExpenses: 0, expenseBreakdown: {}, name: l.name }; });
                 let periodRealizedPL = 0; let totalFundAdded = 0; let globalInvested = 0;
@@ -1422,16 +867,32 @@
                     default: return <Dashboard data={data} metrics={metrics} />;
                 }
             };
+            
+            // --- AUTH CHECK ---
+            if (loading) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white"><div className="loader mr-3"></div> Loading...</div>;
+
+            if (!user) {
+                return <LoginView onDevLogin={(u) => setUser(u)} />;
+            }
+
+            // --- SUBSCRIPTION CHECK (THE WALL) ---
+            if (subscriptionStatus !== 'active' && user.uid !== 'dev-user') { // Dev user bypasses
+                 return <SubscriptionView user={user} onSubscribe={handleSubscribe} />;
+            }
 
             return (
                 <div className="pl-64 min-h-screen">
-                    <Sidebar view={view} setView={navigate} setEditingVoucher={setEditingVoucher} />
+                    <Sidebar view={view} setView={navigate} setEditingVoucher={setEditingVoucher} user={user} onLogout={handleLogout} />
                     <main className="p-8 max-w-7xl mx-auto">
                         {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded shadow-lg text-white font-medium z-50 fade-in flex items-center gap-4 ${notification.type === 'error' ? 'bg-red-500' : 'bg-emerald-500'}`}>{notification.msg}</div>}
-                        {renderContent()}
+                        {data ? renderContent() : <div className="text-center p-10">Initializing Data...</div>}
                     </main>
-                    <Modal isOpen={isLedgerModalOpen} onClose={() => setIsLedgerModalOpen(false)} title="Quick Ledger"><QuickLedgerForm data={data} onSubmit={(l) => { addLedger(l); setIsLedgerModalOpen(false); }} /></Modal>
-                    <Modal isOpen={isStockModalOpen} onClose={() => setIsStockModalOpen(false)} title="Quick Stock"><QuickStockForm data={data} onSubmit={(s) => { addStockItem(s); setIsStockModalOpen(false); }} /></Modal>
+                    {data && (
+                        <>
+                            <Modal isOpen={isLedgerModalOpen} onClose={() => setIsLedgerModalOpen(false)} title="Quick Ledger"><QuickLedgerForm data={data} onSubmit={(l) => { addLedger(l); setIsLedgerModalOpen(false); }} /></Modal>
+                            <Modal isOpen={isStockModalOpen} onClose={() => setIsStockModalOpen(false)} title="Quick Stock"><QuickStockForm data={data} onSubmit={(s) => { addStockItem(s); setIsStockModalOpen(false); }} /></Modal>
+                        </>
+                    )}
                     <ConfirmModal isOpen={confirmDialog.isOpen} title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))} type={confirmDialog.type} />
                 </div>
             );
